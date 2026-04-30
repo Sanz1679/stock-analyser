@@ -439,7 +439,7 @@ def recommendation(mos: Optional[float], score: int) -> tuple[str, str, str]:
     if mos is None:
         return "INSUFFICIENT DATA", "#888888", "DCF inputs unavailable for this ticker."
     if mos >= 25 and score >= 2:
-        return "BUY", "#22c55e", f"Trading {mos:.0f}% below intrinsic value with {score}/3 quality flags."
+        return "BUY", "#16a34a", f"Trading {mos:.0f}% below intrinsic value with {score}/3 quality flags."
     if mos >= 0:
         return "HOLD", "#fbbf24", f"Margin of safety {mos:.0f}% — fair, not cheap."
     return "SELL / AVOID", "#ef4444", f"Trading {abs(mos):.0f}% above intrinsic value — overpriced."

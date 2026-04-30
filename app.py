@@ -1,4 +1,4 @@
-"""Terminal-style Buffett stock analyser — tabs, cards, tranches, charts."""
+"""Terminal-style Buffett stock analyser — tabs, cards, charts."""
 from __future__ import annotations
 
 import pandas as pd
@@ -19,7 +19,6 @@ from analyzer import (
     quality_checklist,
     recommendation,
     reverse_dcf_growth,
-    tranches,
 )
 
 st.set_page_config(page_title="Buffett Terminal", page_icon="◉", layout="wide",
@@ -34,19 +33,19 @@ html, body, [class*="css"], .stApp, p, span, div, label, button, input, textarea
     font-family: 'JetBrains Mono', 'Courier New', monospace !important;
 }
 .stApp {
-    background: radial-gradient(ellipse at top, #0d1f12 0%, #0a0e0a 50%, #050805 100%) !important;
+    background: radial-gradient(ellipse at top, #0c1410 0%, #0a0e0a 50%, #050805 100%) !important;
 }
 section[data-testid="stSidebar"] {
     background: #0a0e0a !important;
-    border-right: 1px solid #22c55e22;
+    border-right: 1px solid #16a34a22;
 }
 h1, h2, h3, h4 { color: #d4d4d4 !important; letter-spacing: 0.02em; }
 
 /* Mastercard-style metric card */
 .tcard {
     background: linear-gradient(135deg, #131816 0%, #0d1311 100%);
-    border: 1px solid #22c55e22;
-    border-left: 3px solid #22c55e;
+    border: 1px solid #16a34a22;
+    border-left: 3px solid #16a34a;
     border-radius: 14px;
     padding: 1.1rem 1.2rem;
     box-shadow: 0 8px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03);
@@ -59,7 +58,7 @@ h1, h2, h3, h4 { color: #d4d4d4 !important; letter-spacing: 0.02em; }
     content: '';
     position: absolute; top: -50%; right: -30%;
     width: 200px; height: 200px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(22,163,74,0.08) 0%, transparent 70%);
     pointer-events: none;
 }
 .tcard.amber { border-left-color: #fbbf24; }
@@ -74,7 +73,7 @@ h1, h2, h3, h4 { color: #d4d4d4 !important; letter-spacing: 0.02em; }
     letter-spacing: 0.15em; margin-bottom: 0.45rem; font-weight: 500;
 }
 .tvalue { font-size: 1.9rem; font-weight: 700; line-height: 1.1; color: #d4d4d4; }
-.tvalue.green { color: #22c55e; }
+.tvalue.green { color: #16a34a; }
 .tvalue.amber { color: #fbbf24; }
 .tvalue.red { color: #ef4444; }
 .tsub { color: #9ca3af; font-size: 0.78rem; margin-top: 0.4rem; }
@@ -99,15 +98,15 @@ h1, h2, h3, h4 { color: #d4d4d4 !important; letter-spacing: 0.02em; }
 /* Header bar */
 .tickerbar {
     display: flex; align-items: baseline; gap: 1rem;
-    border-bottom: 1px solid #22c55e22; padding-bottom: 0.6rem; margin-bottom: 1rem;
+    border-bottom: 1px solid #16a34a22; padding-bottom: 0.6rem; margin-bottom: 1rem;
 }
-.tickersym { font-size: 1.8rem; font-weight: 800; color: #22c55e; }
+.tickersym { font-size: 1.8rem; font-weight: 800; color: #16a34a; }
 .tickername { color: #9ca3af; font-size: 0.95rem; }
-.tprompt::before { content: "> "; color: #22c55e; font-weight: 700; }
+.tprompt::before { content: "> "; color: #16a34a; font-weight: 700; }
 
 /* Tabs */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 0.25rem; border-bottom: 1px solid #22c55e22; background: transparent;
+    gap: 0.25rem; border-bottom: 1px solid #16a34a22; background: transparent;
 }
 .stTabs [data-baseweb="tab"] {
     background: transparent; color: #6b7280;
@@ -115,36 +114,36 @@ h1, h2, h3, h4 { color: #d4d4d4 !important; letter-spacing: 0.02em; }
     font-family: 'JetBrains Mono', monospace !important;
     font-weight: 500; letter-spacing: 0.05em;
 }
-.stTabs [aria-selected="true"] { color: #22c55e !important; background: #131816 !important; }
+.stTabs [aria-selected="true"] { color: #16a34a !important; background: #131816 !important; }
 
 /* Inputs */
 .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
-    background: #0d1311 !important; border-color: #22c55e44 !important; color: #d4d4d4 !important;
+    background: #0d1311 !important; border-color: #16a34a44 !important; color: #d4d4d4 !important;
 }
 .stButton button[kind="primary"] {
-    background: #22c55e !important; color: #0a0e0a !important; border: none !important;
+    background: #16a34a !important; color: #0a0e0a !important; border: none !important;
     font-weight: 700 !important; letter-spacing: 0.1em;
 }
-.stSlider [data-baseweb="slider"] { color: #22c55e; }
+.stSlider [data-baseweb="slider"] { color: #16a34a; }
 
 /* Tranche table */
 .tranche-row {
     display: grid; grid-template-columns: 0.5fr 1fr 1fr 1fr 1fr 1fr;
-    padding: 0.7rem 1rem; border-bottom: 1px solid #22c55e15;
+    padding: 0.7rem 1rem; border-bottom: 1px solid #16a34a15;
     align-items: center; gap: 0.5rem;
 }
 .tranche-row.head { color: #6b7280; font-size: 0.7rem; text-transform: uppercase;
-                    letter-spacing: 0.12em; border-bottom: 1px solid #22c55e44; }
-.tranche-row.active { background: rgba(34,197,94,0.06); }
-.badge-active { background: #22c55e; color: #0a0e0a; padding: 0.2rem 0.6rem;
+                    letter-spacing: 0.12em; border-bottom: 1px solid #16a34a44; }
+.tranche-row.active { background: rgba(22,163,74,0.06); }
+.badge-active { background: #16a34a; color: #0a0e0a; padding: 0.2rem 0.6rem;
                 border-radius: 4px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; }
 .badge-wait   { background: #1f2937; color: #9ca3af; padding: 0.2rem 0.6rem;
                 border-radius: 4px; font-size: 0.7rem; letter-spacing: 0.1em; }
 
 /* Checklist rows */
-.chk-pass { color: #22c55e; }
+.chk-pass { color: #16a34a; }
 .chk-fail { color: #ef4444; }
-hr { border-color: #22c55e22 !important; }
+hr { border-color: #16a34a22 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -205,12 +204,6 @@ with st.sidebar:
     discount = st.slider("Discount rate %", 6.0, 15.0, 10.0, 0.5)
     terminal = st.slider("Terminal growth %", 1.0, 4.0, 2.5, 0.25)
     st.divider()
-    st.markdown("**POSITION SIZING**")
-    budget = st.number_input("Total budget", min_value=100.0, value=10000.0, step=500.0)
-    t1 = st.slider("Tranche 1 discount %", 5, 30, 15)
-    t2 = st.slider("Tranche 2 discount %", 20, 45, 30)
-    t3 = st.slider("Tranche 3 discount %", 35, 60, 45)
-    st.divider()
     run = st.button("► ANALYSE", type="primary", use_container_width=True)
 
 
@@ -219,7 +212,7 @@ def render_header(f: Fundamentals, mos, verdict, color, reason):
     change = None
     if f.price and f.prev_close:
         change = (f.price - f.prev_close) / f.prev_close * 100
-    chg_str = f"<span style='color:{'#22c55e' if (change or 0)>=0 else '#ef4444'}'>{'+' if (change or 0)>=0 else ''}{change:.2f}%</span>" if change is not None else ""
+    chg_str = f"<span style='color:{'#16a34a' if (change or 0)>=0 else '#ef4444'}'>{'+' if (change or 0)>=0 else ''}{change:.2f}%</span>" if change is not None else ""
 
     st.markdown(f"""
     <div class="tickerbar">
@@ -230,9 +223,9 @@ def render_header(f: Fundamentals, mos, verdict, color, reason):
     """, unsafe_allow_html=True)
 
     # Verdict hero
-    grad = {"#22c55e": ("#16a34a", "#15803d"),
-            "#fbbf24": ("#d97706", "#b45309"),
-            "#ef4444": ("#dc2626", "#991b1b"),
+    grad = {"#16a34a": ("#15803d", "#14532d"),
+            "#fbbf24": ("#b45309", "#78350f"),
+            "#ef4444": ("#b91c1c", "#7f1d1d"),
             "#888888": ("#374151", "#1f2937")}[color]
     st.markdown(f"""
     <div class="verdict-hero" style="--vc1:{grad[0]}; --vc2:{grad[1]}">
@@ -243,7 +236,7 @@ def render_header(f: Fundamentals, mos, verdict, color, reason):
     """, unsafe_allow_html=True)
 
 
-def render_overview(f: Fundamentals, intrinsic, mos, verdict, color, score, t1, t2, t3, budget):
+def render_overview(f: Fundamentals, intrinsic, mos, verdict, color, score):
     fcfy = fcf_yield(f.market_cap, f.fcf_latest)
 
     # 4-card top row
@@ -268,13 +261,13 @@ def render_overview(f: Fundamentals, intrinsic, mos, verdict, color, score, t1, 
     if pz:
         fig = go.Figure()
         fig.add_shape(type="rect", x0=pz["low"], x1=pz["low"]+(pz["high"]-pz["low"])*0.33,
-                      y0=0, y1=1, fillcolor="#22c55e22", line_width=0)
+                      y0=0, y1=1, fillcolor="rgba(22,163,74,0.18)", line_width=0)
         fig.add_shape(type="rect", x0=pz["low"]+(pz["high"]-pz["low"])*0.33, x1=pz["low"]+(pz["high"]-pz["low"])*0.66,
-                      y0=0, y1=1, fillcolor="#fbbf2422", line_width=0)
+                      y0=0, y1=1, fillcolor="rgba(180,140,40,0.18)", line_width=0)
         fig.add_shape(type="rect", x0=pz["low"]+(pz["high"]-pz["low"])*0.66, x1=pz["high"],
-                      y0=0, y1=1, fillcolor="#ef444422", line_width=0)
+                      y0=0, y1=1, fillcolor="rgba(180,60,60,0.18)", line_width=0)
         # Markers
-        markers = [("52w low", pz["low"], "#22c55e"),
+        markers = [("52w low", pz["low"], "#16a34a"),
                    ("52w high", pz["high"], "#ef4444"),
                    ("Current", pz["current"], "#ffffff")]
         if intrinsic: markers.append(("Intrinsic", intrinsic, "#3b82f6"))
@@ -293,36 +286,6 @@ def render_overview(f: Fundamentals, intrinsic, mos, verdict, color, score, t1, 
                    f"(0% = at low, 100% = at high). Green band = value zone.")
     else:
         st.info("Price-zone data unavailable.")
-
-    # Tranche table
-    st.markdown("### POSITION SIZING — BUY TRANCHES")
-    if not intrinsic:
-        st.warning("Need a valid DCF intrinsic value to compute tranches.")
-        return
-    tr = tranches(intrinsic, f.price,
-                  discounts=(t1/100, t2/100, t3/100),
-                  allocations=(0.25, 0.35, 0.40),
-                  budget=budget)
-    head = """<div class="tranche-row head">
-      <div>#</div><div>Trigger price</div><div>Discount</div>
-      <div>Allocation</div><div>$ to deploy</div><div>Status</div></div>"""
-    rows = [head]
-    cur = "USD" if not f.currency else f.currency
-    for i, t in enumerate(tr, 1):
-        active_cls = "active" if t["active"] else ""
-        badge = '<span class="badge-active">● ACTIVE</span>' if t["active"] \
-                else f'<span class="badge-wait">wait {t["distance_pct"]:+.1f}%</span>'
-        rows.append(f"""<div class="tranche-row {active_cls}">
-          <div><b>{i}</b></div>
-          <div>{fmt_money(t["trigger"], cur)}</div>
-          <div>-{t["discount_pct"]:.0f}%</div>
-          <div>{t["allocation_pct"]:.0f}%</div>
-          <div>{fmt_money(t["dollars"], cur)}</div>
-          <div>{badge}</div>
-        </div>""")
-    st.markdown("".join(rows), unsafe_allow_html=True)
-    st.caption("Tranches let you scale in: deploy more capital as the discount widens. "
-               "Adjust thresholds in the sidebar.")
 
 
 def render_fundamentals(f: Fundamentals):
@@ -416,7 +379,7 @@ def render_charts(f: Fundamentals, intrinsic):
         if not f.price_history.empty and intrinsic and f.price:
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=f.price_history.index, y=f.price_history["Close"],
-                                     name="Price", line=dict(color="#22c55e", width=2)))
+                                     name="Price", line=dict(color="#16a34a", width=2)))
             fig.add_hline(y=intrinsic, line_dash="dash", line_color="#3b82f6",
                           annotation_text=f"Intrinsic {fmt_money(intrinsic,f.currency)}")
             fig.add_hline(y=intrinsic * 0.75, line_dash="dot", line_color="#fbbf24",
@@ -428,7 +391,7 @@ def render_charts(f: Fundamentals, intrinsic):
     with g2:
         if not f.eps_history.empty:
             fig = go.Figure(go.Bar(x=year_index(f.eps_history), y=f.eps_history.values,
-                                   marker_color="#22c55e"))
+                                   marker_color="#16a34a"))
             fig.update_layout(**dark_layout("EPS history"))
             st.plotly_chart(fig, use_container_width=True)
 
@@ -436,18 +399,18 @@ def render_charts(f: Fundamentals, intrinsic):
     with g3:
         if not f.roe_history.empty:
             fig = go.Figure(go.Bar(x=year_index(f.roe_history), y=f.roe_history.values,
-                marker_color=["#22c55e" if v>=15 else "#fbbf24" if v>=10 else "#ef4444"
+                marker_color=["#16a34a" if v>=15 else "#fbbf24" if v>=10 else "#ef4444"
                               for v in f.roe_history.values]))
-            fig.add_hline(y=15, line_dash="dash", line_color="#22c55e",
+            fig.add_hline(y=15, line_dash="dash", line_color="#16a34a",
                           annotation_text="Buffett 15%")
             fig.update_layout(**dark_layout("ROE % history"))
             st.plotly_chart(fig, use_container_width=True)
     with g4:
         if not f.de_history.empty:
             fig = go.Figure(go.Bar(x=year_index(f.de_history), y=f.de_history.values,
-                marker_color=["#22c55e" if v<=0.5 else "#fbbf24" if v<=1.0 else "#ef4444"
+                marker_color=["#16a34a" if v<=0.5 else "#fbbf24" if v<=1.0 else "#ef4444"
                               for v in f.de_history.values]))
-            fig.add_hline(y=0.5, line_dash="dash", line_color="#22c55e",
+            fig.add_hline(y=0.5, line_dash="dash", line_color="#16a34a",
                           annotation_text="Safe 0.5")
             fig.update_layout(**dark_layout("Debt / Equity history"))
             st.plotly_chart(fig, use_container_width=True)
@@ -456,7 +419,7 @@ def render_charts(f: Fundamentals, intrinsic):
     with g5:
         if not f.fcf_history.empty:
             fig = go.Figure(go.Bar(x=year_index(f.fcf_history), y=f.fcf_history.values,
-                marker_color=["#22c55e" if v>=0 else "#ef4444" for v in f.fcf_history.values]))
+                marker_color=["#16a34a" if v>=0 else "#ef4444" for v in f.fcf_history.values]))
             fig.update_layout(**dark_layout("Free Cash Flow"))
             st.plotly_chart(fig, use_container_width=True)
     with g6:
@@ -510,7 +473,7 @@ def render_checklist(f: Fundamentals, mos, color):
 
 
 # ─── MAIN ───────────────────────────────────────────────────────────────────
-st.markdown('<div class="tprompt" style="font-size:0.8rem; color:#22c55e; letter-spacing:0.2em;">BUFFETT_TERMINAL@v2 :: live_feed</div>',
+st.markdown('<div class="tprompt" style="font-size:0.8rem; color:#16a34a; letter-spacing:0.2em;">BUFFETT_TERMINAL@v2 :: live_feed</div>',
             unsafe_allow_html=True)
 st.markdown("# ◉ Stock Analyser")
 
@@ -550,7 +513,7 @@ render_header(f, mos, verdict, color, reason)
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["◉ OVERVIEW", "▤ FUNDAMENTALS", "$ VALUATION",
                                          "▦ CHARTS", "✓ CHECKLIST"])
-with tab1: render_overview(f, intrinsic, mos, verdict, color, score, t1, t2, t3, budget)
+with tab1: render_overview(f, intrinsic, mos, verdict, color, score)
 with tab2: render_fundamentals(f)
 with tab3: render_valuation(f, intrinsic, growth, discount, terminal, mos)
 with tab4: render_charts(f, intrinsic)
