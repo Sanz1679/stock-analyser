@@ -1,1 +1,1 @@
-# stock-analyser
+# stock-analyser This is a read me file.
