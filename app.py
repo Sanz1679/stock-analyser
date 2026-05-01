@@ -58,7 +58,7 @@ html, body, [class*="css"], .stApp, p, span, div, label, button, input, textarea
     font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
 }}
 .stApp, .main {{ background: {P['bg']} !important; }}
-.block-container {{ padding-top: 1.5rem !important; padding-bottom: 4rem !important; max-width: 1280px !important; }}
+.block-container {{ padding-top: 3.5rem !important; padding-bottom: 4rem !important; max-width: 1280px !important; }}
 
 h1 {{ color: {P['text']} !important; font-weight: 600 !important; font-size: 1.5rem !important; margin: 0 !important; }}
 h2 {{ color: {P['text']} !important; font-weight: 600 !important; font-size: 1.05rem !important; margin: 0.5rem 0 0.6rem !important; }}
@@ -161,6 +161,12 @@ st.markdown(CSS, unsafe_allow_html=True)
 
 
 # ─── helpers ────────────────────────────────────────────────────────────────
+def hex_rgba(hex_str: str, alpha: float = 0.1) -> str:
+    """#rrggbb -> rgba(r,g,b,a) so plotly accepts it."""
+    h = hex_str.lstrip("#")
+    return f"rgba({int(h[0:2],16)},{int(h[2:4],16)},{int(h[4:6],16)},{alpha})"
+
+
 def fmt_money(x, currency="USD"):
     if x is None: return "—"
     sym = {"USD": "$", "AUD": "A$"}.get(currency, "")
@@ -266,7 +272,7 @@ if f.price is None:
 # ─── Compute everything once ────────────────────────────────────────────────
 A = auto_assumptions(f)
 intrinsic = dcf_intrinsic_value(
-    f.fcf_latest, f.shares_outstanding,
+    A["fcf"], f.shares_outstanding,
     A["growth"], A["discount"], A["terminal"], A["years"], f.net_cash or 0,
 )
 mos = margin_of_safety(intrinsic, f.price)
@@ -274,7 +280,7 @@ score = quality_score(f)
 verdict, vclass, reason = recommendation(mos, score)
 graham = graham_number(f.eps_ttm, f.book_value_per_share)
 graham_mos = ((graham - f.price) / graham * 100) if (graham and f.price) else None
-rev_growth = reverse_dcf_growth(f.price, f.fcf_latest, f.shares_outstanding,
+rev_growth = reverse_dcf_growth(f.price, A["fcf"], f.shares_outstanding,
                                 A["discount"], A["terminal"], A["years"], f.net_cash or 0)
 fcfy = fcf_yield(f.market_cap, f.fcf_latest)
 oey = fcf_yield(f.market_cap, f.owner_earnings_latest)
@@ -294,7 +300,12 @@ if change is not None:
 
 vmap = {"positive": "v-positive", "warn": "v-warn", "negative": "v-negative", "neutral": "v-neutral"}
 vdot = {"positive": "●", "warn": "●", "negative": "●", "neutral": "●"}
-mos_label = f" · {mos:+.0f}% MoS" if mos is not None else ""
+def _mos_label(m):
+    if m is None: return ""
+    if m > 99: return " · >99% MoS"
+    if m < -99: return " · -99%+ MoS"
+    return f" · {m:+.0f}% MoS"
+mos_label = _mos_label(mos)
 
 st.markdown(f"""
 <div class='ticker-bar'>
@@ -374,7 +385,7 @@ with tab_overview:
                                      mode="lines",
                                      line=dict(color=P["primary"], width=2),
                                      fill="tozeroy",
-                                     fillcolor=f"{P['primary']}1a",
+                                     fillcolor=hex_rgba(P['primary'], 0.1),
                                      hovertemplate="%{y:.2f}<extra></extra>"))
             if intrinsic:
                 fig.add_hline(y=intrinsic, line_dash="dot", line_color=P["positive"],
@@ -478,6 +489,8 @@ with tab_financials:
 # ════════ VALUATION ══════════
 with tab_valuation:
     # Verdict + reasoning card
+    fcf_used = A.get("fcf")
+    fcf_per_share = (fcf_used / f.shares_outstanding) if (fcf_used and f.shares_outstanding) else None
     st.markdown(f"""
     <div class='card'>
       <div style='display:flex; align-items:center; gap:0.8rem; margin-bottom:0.5rem;'>
@@ -485,13 +498,44 @@ with tab_valuation:
         <span class='muted' style='font-size:0.86rem;'>{reason}</span>
       </div>
       <div class='muted' style='font-size:0.82rem; margin-top:0.6rem;'>
-        DCF assumptions auto-derived from this stock's history:
-        growth <b>{A['growth']*100:.1f}%</b> (5y FCF CAGR, capped 3–12%) ·
+        DCF inputs auto-derived from this stock's history:
+        FCF <b>{fmt_money(fcf_used, f.currency)}</b> (3-year average) ·
+        growth <b>{A['growth']*100:.1f}%</b> (5y FCF CAGR, capped 3–18%) ·
         discount <b>{A['discount']*100:.0f}%</b> (Buffett's hurdle) ·
-        terminal growth <b>{A['terminal']*100:.1f}%</b> (long-run GDP).
+        terminal <b>{A['terminal']*100:.1f}%</b> (long-run GDP).
       </div>
     </div>
     """, unsafe_allow_html=True)
+
+    with st.expander("How is this calculated?"):
+        st.markdown(f"""
+        **Intrinsic value (DCF)** — Project free cash flow forward 10 years at the
+        historical growth rate, discount each year back to today at 10%, add a
+        terminal value (FCF growing forever at 2.5%), divide by shares outstanding.
+
+        - **FCF used**: 3-year average = `{fmt_money(fcf_used, f.currency)}` (smooths
+          out lumpy capex years).
+        - **FCF per share**: `{fmt_money(fcf_per_share, f.currency) if fcf_per_share else '—'}`
+        - **Growth rate**: `{A['growth']*100:.1f}%` per year (clipped to 3-18%).
+        - **Discount rate**: `10%` (Buffett's hurdle = long-run equity returns).
+        - **Terminal growth**: `2.5%` (long-run global GDP).
+        - **Net cash adjustment**: `{fmt_money(f.net_cash, f.currency)}` added to equity value.
+        - **Intrinsic per share**: `{fmt_money(intrinsic, f.currency)}`.
+
+        **Margin of Safety** = `(intrinsic − price) / intrinsic`. Positive means
+        cheap; negative means expensive.
+
+        **Verdict** is quality-adjusted:
+        - Strong business (≥2/3 Buffett flags) — BUY at MoS ≥ 25%, HOLD if within
+          ±15%, OVERVALUED if priced well above DCF.
+        - Weak business (<2/3 flags) — needs MoS ≥ 40% before AVOID is upgraded
+          to DEEP VALUE; AVOID if priced above DCF.
+
+        **Why might a quality stock show OVERVALUED?** DCF is conservative by
+        design — it can't justify hyper-growth multiples. Cross-check with
+        Reverse DCF below: if the implied growth looks plausible, the stock may
+        deserve its premium. If it's >18-20%, the market is pricing in a lot.
+        """)
 
     # 3 valuation cards
     cv = st.columns(3)
