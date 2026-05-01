@@ -1,151 +1,164 @@
-"""Terminal-style Buffett stock analyser — tabs, cards, charts."""
+"""Clean, calm stock analyser. Light + dark mode, single ticker input, auto-DCF."""
 from __future__ import annotations
 
+import datetime as dt
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 from analyzer import (
     Fundamentals,
-    buffett_score,
+    auto_assumptions,
     dcf_intrinsic_value,
     dcf_sensitivity,
     fcf_yield,
-    fetch,
+    generate_insights,
     graham_number,
     margin_of_safety,
-    normalize_ticker,
-    price_zone,
-    quality_checklist,
+    quality_score,
     recommendation,
     reverse_dcf_growth,
+    smart_fetch,
+    ten_year_summary,
 )
 
-st.set_page_config(page_title="Buffett Terminal", page_icon="◉", layout="wide",
-                   initial_sidebar_state="expanded")
+st.set_page_config(page_title="Stock Analyser", page_icon="●", layout="wide",
+                   initial_sidebar_state="collapsed")
 
-# ─── CSS / theme ────────────────────────────────────────────────────────────
-st.markdown("""
+# ─── Theme state ────────────────────────────────────────────────────────────
+if "theme" not in st.session_state:
+    st.session_state.theme = "light"
+THEME = st.session_state.theme
+
+PALETTES = {
+    "light": {
+        "bg": "#f8fafc", "card": "#ffffff", "text": "#0f172a", "muted": "#64748b",
+        "border": "#e2e8f0", "subtle": "#f1f5f9",
+        "primary": "#2563eb", "positive": "#059669", "warn": "#d97706",
+        "negative": "#dc2626", "neutral": "#94a3b8",
+        "chart_bg": "#ffffff", "plotly_template": "plotly_white",
+        "shadow": "0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04)",
+    },
+    "dark": {
+        "bg": "#0b1120", "card": "#111827", "text": "#e5e7eb", "muted": "#9ca3af",
+        "border": "#1f2937", "subtle": "#0f172a",
+        "primary": "#60a5fa", "positive": "#34d399", "warn": "#fbbf24",
+        "negative": "#f87171", "neutral": "#6b7280",
+        "chart_bg": "#111827", "plotly_template": "plotly_dark",
+        "shadow": "0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3)",
+    },
+}
+P = PALETTES[THEME]
+
+CSS = f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-html, body, [class*="css"], .stApp, p, span, div, label, button, input, textarea {
-    font-family: 'JetBrains Mono', 'Courier New', monospace !important;
-}
-.stApp {
-    background: radial-gradient(ellipse at top, #0c1410 0%, #0a0e0a 50%, #050805 100%) !important;
-}
-section[data-testid="stSidebar"] {
-    background: #0a0e0a !important;
-    border-right: 1px solid #16a34a22;
-}
-h1, h2, h3, h4 { color: #d4d4d4 !important; letter-spacing: 0.02em; }
+html, body, [class*="css"], .stApp, p, span, div, label, button, input, textarea, h1, h2, h3, h4, h5, h6 {{
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+}}
+.stApp, .main {{ background: {P['bg']} !important; }}
+.block-container {{ padding-top: 1.5rem !important; padding-bottom: 4rem !important; max-width: 1280px !important; }}
 
-/* Mastercard-style metric card */
-.tcard {
-    background: linear-gradient(135deg, #131816 0%, #0d1311 100%);
-    border: 1px solid #16a34a22;
-    border-left: 3px solid #16a34a;
-    border-radius: 14px;
-    padding: 1.1rem 1.2rem;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03);
-    position: relative;
-    overflow: hidden;
-    margin-bottom: 0.75rem;
-    height: 100%;
-}
-.tcard::after {
-    content: '';
-    position: absolute; top: -50%; right: -30%;
-    width: 200px; height: 200px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(22,163,74,0.08) 0%, transparent 70%);
-    pointer-events: none;
-}
-.tcard.amber { border-left-color: #fbbf24; }
-.tcard.amber::after { background: radial-gradient(circle, rgba(251,191,36,0.10) 0%, transparent 70%); }
-.tcard.red { border-left-color: #ef4444; }
-.tcard.red::after { background: radial-gradient(circle, rgba(239,68,68,0.10) 0%, transparent 70%); }
-.tcard.blue { border-left-color: #3b82f6; }
-.tcard.blue::after { background: radial-gradient(circle, rgba(59,130,246,0.10) 0%, transparent 70%); }
+h1 {{ color: {P['text']} !important; font-weight: 600 !important; font-size: 1.5rem !important; margin: 0 !important; }}
+h2 {{ color: {P['text']} !important; font-weight: 600 !important; font-size: 1.05rem !important; margin: 0.5rem 0 0.6rem !important; }}
+h3 {{ color: {P['text']} !important; font-weight: 600 !important; font-size: 0.95rem !important; }}
+p, label, span, div {{ color: {P['text']}; }}
+.muted {{ color: {P['muted']} !important; }}
 
-.tlabel {
-    color: #6b7280; font-size: 0.7rem; text-transform: uppercase;
-    letter-spacing: 0.15em; margin-bottom: 0.45rem; font-weight: 500;
-}
-.tvalue { font-size: 1.9rem; font-weight: 700; line-height: 1.1; color: #d4d4d4; }
-.tvalue.green { color: #16a34a; }
-.tvalue.amber { color: #fbbf24; }
-.tvalue.red { color: #ef4444; }
-.tsub { color: #9ca3af; font-size: 0.78rem; margin-top: 0.4rem; }
+.card {{
+    background: {P['card']}; border: 1px solid {P['border']}; border-radius: 10px;
+    padding: 1rem 1.1rem; box-shadow: {P['shadow']}; margin-bottom: 0.75rem;
+}}
+.metric-group {{
+    background: {P['card']}; border: 1px solid {P['border']}; border-radius: 10px;
+    padding: 1rem 1.1rem; box-shadow: {P['shadow']}; height: 100%;
+}}
+.metric-group h4 {{
+    margin: 0 0 0.7rem 0; color: {P['text']}; font-size: 0.78rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+}}
+.metric-row {{ display: flex; justify-content: space-between; align-items: baseline;
+              padding: 0.32rem 0; border-bottom: 1px solid {P['subtle']}; font-size: 0.85rem; }}
+.metric-row:last-child {{ border-bottom: none; }}
+.metric-row .lbl {{ color: {P['muted']}; }}
+.metric-row .val {{ color: {P['text']}; font-weight: 500; }}
 
-/* Verdict hero */
-.verdict-hero {
-    background: linear-gradient(135deg, var(--vc1) 0%, var(--vc2) 100%);
-    border-radius: 18px;
-    padding: 1.6rem 2rem;
-    text-align: center;
-    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
-    border: 1px solid rgba(255,255,255,0.08);
-    margin: 0.5rem 0 1rem 0;
-}
-.verdict-label {
-    font-size: 0.75rem; letter-spacing: 0.25em; color: rgba(255,255,255,0.7);
-    margin-bottom: 0.4rem; text-transform: uppercase;
-}
-.verdict-text { font-size: 2.6rem; font-weight: 800; color: white; line-height: 1; }
-.verdict-reason { color: rgba(255,255,255,0.85); margin-top: 0.6rem; font-size: 0.9rem; }
+.verdict-pill {{
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.32rem 0.85rem; border-radius: 999px; font-weight: 600;
+    font-size: 0.82rem; letter-spacing: 0.04em;
+}}
+.v-positive {{ background: {'#dcfce7' if THEME=='light' else '#064e3b'}; color: {P['positive']}; }}
+.v-warn {{ background: {'#fef3c7' if THEME=='light' else '#78350f'}; color: {P['warn']}; }}
+.v-negative {{ background: {'#fee2e2' if THEME=='light' else '#7f1d1d'}; color: {P['negative']}; }}
+.v-neutral {{ background: {P['subtle']}; color: {P['muted']}; }}
 
-/* Header bar */
-.tickerbar {
-    display: flex; align-items: baseline; gap: 1rem;
-    border-bottom: 1px solid #16a34a22; padding-bottom: 0.6rem; margin-bottom: 1rem;
-}
-.tickersym { font-size: 1.8rem; font-weight: 800; color: #16a34a; }
-.tickername { color: #9ca3af; font-size: 0.95rem; }
-.tprompt::before { content: "> "; color: #16a34a; font-weight: 700; }
+.day-change-pos {{ color: {P['positive']}; font-weight: 500; font-size: 0.9rem; }}
+.day-change-neg {{ color: {P['negative']}; font-weight: 500; font-size: 0.9rem; }}
 
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 0.25rem; border-bottom: 1px solid #16a34a22; background: transparent;
-}
-.stTabs [data-baseweb="tab"] {
-    background: transparent; color: #6b7280;
-    border-radius: 8px 8px 0 0; padding: 0.5rem 1.1rem;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-weight: 500; letter-spacing: 0.05em;
-}
-.stTabs [aria-selected="true"] { color: #16a34a !important; background: #131816 !important; }
+.ticker-bar {{
+    display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+    padding: 0.4rem 0 1rem 0; border-bottom: 1px solid {P['border']}; margin-bottom: 1.2rem;
+}}
+.ticker-sym {{ font-size: 1.6rem; font-weight: 700; color: {P['text']}; }}
+.ticker-name {{ color: {P['muted']}; font-size: 0.92rem; }}
+.ticker-price {{ font-size: 1.4rem; font-weight: 600; color: {P['text']}; }}
+
+.insight-card {{
+    background: {P['card']}; border: 1px solid {P['border']}; border-radius: 10px;
+    padding: 0.9rem 1.1rem; margin-bottom: 0.7rem; box-shadow: {P['shadow']};
+}}
+.insight-title {{ font-weight: 600; color: {P['text']}; font-size: 0.92rem; margin-bottom: 0.3rem; }}
+.insight-text {{ color: {P['muted']}; font-size: 0.86rem; line-height: 1.5; }}
+.insight-badge {{
+    display: inline-block; padding: 0.18rem 0.55rem; border-radius: 5px;
+    font-size: 0.66rem; font-weight: 600; letter-spacing: 0.06em;
+    background: {P['subtle']}; color: {P['muted']}; text-transform: uppercase;
+}}
+
+.news-row {{
+    padding: 0.55rem 0; border-bottom: 1px solid {P['subtle']};
+    font-size: 0.86rem;
+}}
+.news-row:last-child {{ border-bottom: none; }}
+.news-row a {{ color: {P['text']} !important; text-decoration: none; }}
+.news-row a:hover {{ color: {P['primary']} !important; }}
+.news-meta {{ color: {P['muted']}; font-size: 0.75rem; margin-top: 0.15rem; }}
+
+section[data-testid="stSidebar"] {{ background: {P['card']} !important; border-right: 1px solid {P['border']}; }}
 
 /* Inputs */
-.stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
-    background: #0d1311 !important; border-color: #16a34a44 !important; color: #d4d4d4 !important;
-}
-.stButton button[kind="primary"] {
-    background: #16a34a !important; color: #0a0e0a !important; border: none !important;
-    font-weight: 700 !important; letter-spacing: 0.1em;
-}
-.stSlider [data-baseweb="slider"] { color: #16a34a; }
+.stTextInput input {{
+    background: {P['card']} !important; border: 1px solid {P['border']} !important;
+    color: {P['text']} !important; border-radius: 8px !important; padding: 0.55rem 0.75rem !important;
+}}
+.stTextInput input:focus {{ border-color: {P['primary']} !important; box-shadow: 0 0 0 3px {P['primary']}22 !important; }}
+.stButton button[kind="primary"] {{
+    background: {P['primary']} !important; color: white !important;
+    border: none !important; border-radius: 8px !important; font-weight: 500 !important;
+}}
 
-/* Tranche table */
-.tranche-row {
-    display: grid; grid-template-columns: 0.5fr 1fr 1fr 1fr 1fr 1fr;
-    padding: 0.7rem 1rem; border-bottom: 1px solid #16a34a15;
-    align-items: center; gap: 0.5rem;
-}
-.tranche-row.head { color: #6b7280; font-size: 0.7rem; text-transform: uppercase;
-                    letter-spacing: 0.12em; border-bottom: 1px solid #16a34a44; }
-.tranche-row.active { background: rgba(22,163,74,0.06); }
-.badge-active { background: #16a34a; color: #0a0e0a; padding: 0.2rem 0.6rem;
-                border-radius: 4px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; }
-.badge-wait   { background: #1f2937; color: #9ca3af; padding: 0.2rem 0.6rem;
-                border-radius: 4px; font-size: 0.7rem; letter-spacing: 0.1em; }
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {{ gap: 0.1rem; border-bottom: 1px solid {P['border']}; }}
+.stTabs [data-baseweb="tab"] {{
+    background: transparent !important; color: {P['muted']} !important;
+    font-weight: 500 !important; font-size: 0.88rem !important;
+    padding: 0.5rem 1rem !important; border-radius: 6px 6px 0 0 !important;
+}}
+.stTabs [aria-selected="true"] {{ color: {P['text']} !important; border-bottom: 2px solid {P['primary']} !important; }}
 
-/* Checklist rows */
-.chk-pass { color: #16a34a; }
-.chk-fail { color: #ef4444; }
-hr { border-color: #16a34a22 !important; }
+/* DataFrames */
+[data-testid="stDataFrame"] {{ background: {P['card']}; border-radius: 8px; }}
+
+/* Theme toggle button container alignment */
+.theme-toggle {{ float: right; }}
+
+hr {{ border-color: {P['border']} !important; }}
 </style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(CSS, unsafe_allow_html=True)
+
 
 # ─── helpers ────────────────────────────────────────────────────────────────
 def fmt_money(x, currency="USD"):
@@ -156,365 +169,446 @@ def fmt_money(x, currency="USD"):
     if abs(x) >= 1e6:  return f"{sym}{x/1e6:.2f}M"
     return f"{sym}{x:,.2f}"
 
-def fmt_pct(x, decimals=1):
+def fmt_pct(x, decimals=2):
     return f"{x:.{decimals}f}%" if x is not None else "—"
 
-def card(label, value, sub="", color="green"):
-    cls = {"green":"", "amber":"amber", "red":"red", "blue":"blue", "neutral":""}.get(color, "")
-    val_color = {"green":"green","amber":"amber","red":"red","blue":"green","neutral":""}.get(color, "")
-    return f"""
-    <div class="tcard {cls}">
-      <div class="tlabel">{label}</div>
-      <div class="tvalue {val_color}">{value}</div>
-      <div class="tsub">{sub}</div>
-    </div>
-    """
+def fmt_num(x, decimals=2):
+    return f"{x:.{decimals}f}" if x is not None else "—"
 
-def color_for(value, good_above=None, good_below=None):
-    if value is None: return "neutral"
-    if good_above is not None:
-        if value >= good_above: return "green"
-        if value >= good_above * 0.66: return "amber"
-        return "red"
-    if good_below is not None:
-        if value <= good_below: return "green"
-        if value <= good_below * 1.5: return "amber"
-        return "red"
-    return "neutral"
+def fmt_date(x):
+    if not x: return "—"
+    try:
+        if isinstance(x, (int, float)):
+            return dt.datetime.fromtimestamp(x).strftime("%b %d, %Y")
+        if isinstance(x, str):
+            return x.split("T")[0] if "T" in x else x
+        return str(x)
+    except Exception:
+        return str(x)
 
-def year_index(series: pd.Series) -> list[str]:
-    return [str(d.year) if hasattr(d, "year") else str(d) for d in series.index]
+def metric_group(title: str, rows: list[tuple[str, str]]) -> str:
+    body = "".join(f'<div class="metric-row"><span class="lbl">{l}</span><span class="val">{v}</span></div>'
+                   for l, v in rows)
+    return f'<div class="metric-group"><h4>{title}</h4>{body}</div>'
 
-def dark_layout(title, height=320):
-    return dict(title=title, height=height, template="plotly_dark",
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                margin=dict(l=10, r=10, t=40, b=10), font=dict(family="JetBrains Mono"))
+def chart_layout(title: str = "", height: int = 240):
+    return dict(
+        title=dict(text=title, font=dict(size=12, color=P['text']), x=0.02, y=0.95),
+        height=height, template=P["plotly_template"],
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=P["chart_bg"],
+        margin=dict(l=10, r=10, t=30, b=10),
+        font=dict(family="Inter", size=10, color=P['muted']),
+        xaxis=dict(gridcolor=P['border'], showline=False, zeroline=False),
+        yaxis=dict(gridcolor=P['border'], showline=False, zeroline=False),
+    )
 
-# ─── Sidebar ────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown('<div class="tprompt"><b>BUFFETT TERMINAL</b></div>', unsafe_allow_html=True)
-    st.caption("v2 · live yfinance feed")
-    st.divider()
-    market = st.radio("MARKET", ["US", "ASX"], horizontal=True)
-    placeholder = "AAPL" if market == "US" else "CBA"
-    ticker_input = st.text_input("TICKER", placeholder)
-    st.divider()
-    st.markdown("**DCF ASSUMPTIONS**")
-    growth = st.slider("Growth %/yr (yr 1-10)", 2.0, 20.0, 8.0, 0.5)
-    discount = st.slider("Discount rate %", 6.0, 15.0, 10.0, 0.5)
-    terminal = st.slider("Terminal growth %", 1.0, 4.0, 2.5, 0.25)
-    st.divider()
-    run = st.button("► ANALYSE", type="primary", use_container_width=True)
+def year_x(series: pd.Series):
+    return [d.year if hasattr(d, "year") else str(d) for d in series.index]
 
-
-# ─── Render ─────────────────────────────────────────────────────────────────
-def render_header(f: Fundamentals, mos, verdict, color, reason):
-    change = None
-    if f.price and f.prev_close:
-        change = (f.price - f.prev_close) / f.prev_close * 100
-    chg_str = f"<span style='color:{'#16a34a' if (change or 0)>=0 else '#ef4444'}'>{'+' if (change or 0)>=0 else ''}{change:.2f}%</span>" if change is not None else ""
-
-    st.markdown(f"""
-    <div class="tickerbar">
-      <span class="tickersym">{f.ticker}</span>
-      <span class="tickername">{f.name} · {f.sector or 'n/a'}</span>
-      <span style="margin-left:auto; font-size:1.4rem; color:#d4d4d4;">{fmt_money(f.price, f.currency)} {chg_str}</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Verdict hero
-    grad = {"#16a34a": ("#15803d", "#14532d"),
-            "#fbbf24": ("#b45309", "#78350f"),
-            "#ef4444": ("#b91c1c", "#7f1d1d"),
-            "#888888": ("#374151", "#1f2937")}[color]
-    st.markdown(f"""
-    <div class="verdict-hero" style="--vc1:{grad[0]}; --vc2:{grad[1]}">
-      <div class="verdict-label">Today's verdict</div>
-      <div class="verdict-text">{verdict}</div>
-      <div class="verdict-reason">{reason}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def render_overview(f: Fundamentals, intrinsic, mos, verdict, color, score):
-    fcfy = fcf_yield(f.market_cap, f.fcf_latest)
-
-    # 4-card top row
-    c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(card("INTRINSIC (DCF)", fmt_money(intrinsic, f.currency),
-                     f"{fmt_pct(mos)} margin of safety", color="green" if mos and mos >= 25 else "amber" if mos and mos >= 0 else "red"),
-                unsafe_allow_html=True)
-    c2.markdown(card("MARKET CAP", fmt_money(f.market_cap, f.currency),
-                     f"P/E {f.pe_ratio:.1f}" if f.pe_ratio else "P/E —", color="blue"),
-                unsafe_allow_html=True)
-    c3.markdown(card("FCF YIELD", fmt_pct(fcfy),
-                     f"FCF {fmt_money(f.fcf_latest, f.currency)}",
-                     color=color_for(fcfy, good_above=5)),
-                unsafe_allow_html=True)
-    c4.markdown(card("DIVIDEND YIELD", fmt_pct(f.dividend_yield) if f.dividend_yield else "—",
-                     f"Payout {fmt_pct(f.payout_ratio)}" if f.payout_ratio else "No payout data",
-                     color="blue"),
-                unsafe_allow_html=True)
-
-    st.markdown("### " + "PRICE ZONE")
-    pz = price_zone(f.price_history, f.price, f.fifty_two_high, f.fifty_two_low)
-    if pz:
-        fig = go.Figure()
-        fig.add_shape(type="rect", x0=pz["low"], x1=pz["low"]+(pz["high"]-pz["low"])*0.33,
-                      y0=0, y1=1, fillcolor="rgba(22,163,74,0.18)", line_width=0)
-        fig.add_shape(type="rect", x0=pz["low"]+(pz["high"]-pz["low"])*0.33, x1=pz["low"]+(pz["high"]-pz["low"])*0.66,
-                      y0=0, y1=1, fillcolor="rgba(180,140,40,0.18)", line_width=0)
-        fig.add_shape(type="rect", x0=pz["low"]+(pz["high"]-pz["low"])*0.66, x1=pz["high"],
-                      y0=0, y1=1, fillcolor="rgba(180,60,60,0.18)", line_width=0)
-        # Markers
-        markers = [("52w low", pz["low"], "#16a34a"),
-                   ("52w high", pz["high"], "#ef4444"),
-                   ("Current", pz["current"], "#ffffff")]
-        if intrinsic: markers.append(("Intrinsic", intrinsic, "#3b82f6"))
-        if f.fifty_day_avg: markers.append(("50d MA", f.fifty_day_avg, "#fbbf24"))
-        if f.two_hundred_day_avg: markers.append(("200d MA", f.two_hundred_day_avg, "#a855f7"))
-        for name, val, col in markers:
-            fig.add_trace(go.Scatter(x=[val], y=[0.5], mode="markers+text",
-                                     marker=dict(size=14, color=col, line=dict(color="white", width=1)),
-                                     text=[name], textposition="top center",
-                                     textfont=dict(color=col, size=11), showlegend=False,
-                                     hovertemplate=f"{name}: %{{x:.2f}}<extra></extra>"))
-        fig.update_layout(**dark_layout("", height=200), yaxis=dict(visible=False, range=[0,1]),
-                          xaxis=dict(title="", showgrid=False))
-        st.plotly_chart(fig, use_container_width=True)
-        st.caption(f"Position in 52w range: **{pz['position_pct']:.0f}%** "
-                   f"(0% = at low, 100% = at high). Green band = value zone.")
-    else:
-        st.info("Price-zone data unavailable.")
-
-
-def render_fundamentals(f: Fundamentals):
-    st.markdown("### CORE BUFFETT METRICS")
-    c1, c2, c3 = st.columns(3)
-    c1.markdown(card("ROE (avg)", fmt_pct(f.roe_avg),
-                     "Buffett wants ≥15%", color=color_for(f.roe_avg, good_above=15)),
-                unsafe_allow_html=True)
-    c2.markdown(card("DEBT / EQUITY", f"{f.de_latest:.2f}" if f.de_latest is not None else "—",
-                     "Lower is safer (≤0.5)", color=color_for(f.de_latest, good_below=0.5)),
-                unsafe_allow_html=True)
-    c3.markdown(card("EPS GROWTH (CAGR)", fmt_pct(f.eps_growth),
-                     "Strong if ≥8%/yr", color=color_for(f.eps_growth, good_above=8)),
-                unsafe_allow_html=True)
-
-    st.markdown("### EXTENDED METRICS")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(card("FCF GROWTH", fmt_pct(f.fcf_growth), "5y CAGR",
-                     color=color_for(f.fcf_growth, good_above=8)), unsafe_allow_html=True)
-    c2.markdown(card("REVENUE GROWTH", fmt_pct(f.revenue_growth), "5y CAGR",
-                     color=color_for(f.revenue_growth, good_above=5)), unsafe_allow_html=True)
-    c3.markdown(card("OPERATING MARGIN", fmt_pct(f.operating_margin), "Pricing power",
-                     color=color_for(f.operating_margin, good_above=15)), unsafe_allow_html=True)
-    c4.markdown(card("EARNINGS STABILITY", f"{f.earnings_stability:.0f}/100" if f.earnings_stability else "—",
-                     "Higher = more predictable",
-                     color=color_for(f.earnings_stability, good_above=60)), unsafe_allow_html=True)
-
-    st.markdown("### OWNER EARNINGS")
-    if f.owner_earnings_latest is not None:
-        oe_yield = fcf_yield(f.market_cap, f.owner_earnings_latest)
-        c1, c2 = st.columns(2)
-        c1.markdown(card("OWNER EARNINGS (latest)", fmt_money(f.owner_earnings_latest, f.currency),
-                         "NI + D&A − Capex (Buffett's preferred FCF)",
-                         color=color_for(f.owner_earnings_latest, good_above=0)), unsafe_allow_html=True)
-        c2.markdown(card("OWNER-EARNINGS YIELD", fmt_pct(oe_yield),
-                         "Higher = better cash return per $ invested",
-                         color=color_for(oe_yield, good_above=5)), unsafe_allow_html=True)
-    else:
-        st.info("Owner-earnings data unavailable.")
-
-
-def render_valuation(f: Fundamentals, intrinsic, growth, discount, terminal, mos):
-    st.markdown("### VALUATION CROSS-CHECK")
-    g_num = graham_number(f.eps_ttm, f.book_value_per_share)
-    g_mos = ((g_num - f.price) / g_num * 100) if (g_num and f.price) else None
-    rev_g = reverse_dcf_growth(f.price, f.fcf_latest, f.shares_outstanding,
-                               discount/100, terminal/100, 10, f.net_cash or 0)
-
-    c1, c2, c3 = st.columns(3)
-    c1.markdown(card("DCF INTRINSIC", fmt_money(intrinsic, f.currency),
-                     f"MoS {fmt_pct(mos)}",
-                     color="green" if mos and mos >= 25 else "amber" if mos and mos >= 0 else "red"),
-                unsafe_allow_html=True)
-    c2.markdown(card("GRAHAM NUMBER", fmt_money(g_num, f.currency),
-                     f"MoS {fmt_pct(g_mos)}" if g_mos is not None else "Needs +ve EPS & BVPS",
-                     color="green" if g_mos and g_mos >= 25 else "amber" if g_mos and g_mos >= 0 else "red"),
-                unsafe_allow_html=True)
-    c3.markdown(card("MARKET-IMPLIED GROWTH", fmt_pct(rev_g),
-                     "Reverse-DCF: growth needed to justify price",
-                     color="green" if rev_g and rev_g <= 8 else "amber" if rev_g and rev_g <= 15 else "red"),
-                unsafe_allow_html=True)
-    if rev_g is not None:
-        st.caption(f"At today's price the market is pricing in **{rev_g:.1f}%/yr** FCF growth. "
-                   f"If you believe actual growth will exceed that, the stock is undervalued.")
-
-    # Sensitivity
-    st.markdown("### DCF SENSITIVITY — INTRINSIC PER SHARE")
-    if f.fcf_latest and f.shares_outstanding:
-        g_grid = [0.04, 0.06, 0.08, 0.10, 0.12]
-        d_grid = [0.08, 0.09, 0.10, 0.11, 0.12]
-        sens = dcf_sensitivity(f.fcf_latest, f.shares_outstanding, g_grid, d_grid,
-                               terminal/100, 10, f.net_cash or 0)
-        if sens is not None:
-            sens_disp = sens.applymap(lambda v: f"{v:,.2f}" if v is not None else "—")
-            st.markdown("Rows = discount rate · Columns = growth rate")
-            sens_for_style = sens.copy()
-            try:
-                styled = sens_for_style.style.background_gradient(cmap="Greens", axis=None) \
-                    .format("{:,.2f}")
-                st.dataframe(styled, use_container_width=True)
-            except Exception:
-                st.dataframe(sens_disp, use_container_width=True)
-            st.caption("Try ±2% growth × ±1% discount. If verdict flips inside the grid, your DCF isn't robust.")
-    else:
-        st.info("Sensitivity grid unavailable (no FCF or shares data).")
-
-
-def render_charts(f: Fundamentals, intrinsic):
-    g1, g2 = st.columns(2)
-    with g1:
-        if not f.price_history.empty and intrinsic and f.price:
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=f.price_history.index, y=f.price_history["Close"],
-                                     name="Price", line=dict(color="#16a34a", width=2)))
-            fig.add_hline(y=intrinsic, line_dash="dash", line_color="#3b82f6",
-                          annotation_text=f"Intrinsic {fmt_money(intrinsic,f.currency)}")
-            fig.add_hline(y=intrinsic * 0.75, line_dash="dot", line_color="#fbbf24",
-                          annotation_text="Buy zone (-25%)")
-            fig.update_layout(**dark_layout("Price vs Intrinsic"))
-            st.plotly_chart(fig, use_container_width=True)
+def quarter_x(series: pd.Series):
+    out = []
+    for d in series.index:
+        if hasattr(d, "year") and hasattr(d, "month"):
+            q = (d.month - 1) // 3 + 1
+            out.append(f"Q{q} {d.year}")
         else:
-            st.info("Price chart unavailable.")
-    with g2:
-        if not f.eps_history.empty:
-            fig = go.Figure(go.Bar(x=year_index(f.eps_history), y=f.eps_history.values,
-                                   marker_color="#16a34a"))
-            fig.update_layout(**dark_layout("EPS history"))
-            st.plotly_chart(fig, use_container_width=True)
-
-    g3, g4 = st.columns(2)
-    with g3:
-        if not f.roe_history.empty:
-            fig = go.Figure(go.Bar(x=year_index(f.roe_history), y=f.roe_history.values,
-                marker_color=["#16a34a" if v>=15 else "#fbbf24" if v>=10 else "#ef4444"
-                              for v in f.roe_history.values]))
-            fig.add_hline(y=15, line_dash="dash", line_color="#16a34a",
-                          annotation_text="Buffett 15%")
-            fig.update_layout(**dark_layout("ROE % history"))
-            st.plotly_chart(fig, use_container_width=True)
-    with g4:
-        if not f.de_history.empty:
-            fig = go.Figure(go.Bar(x=year_index(f.de_history), y=f.de_history.values,
-                marker_color=["#16a34a" if v<=0.5 else "#fbbf24" if v<=1.0 else "#ef4444"
-                              for v in f.de_history.values]))
-            fig.add_hline(y=0.5, line_dash="dash", line_color="#16a34a",
-                          annotation_text="Safe 0.5")
-            fig.update_layout(**dark_layout("Debt / Equity history"))
-            st.plotly_chart(fig, use_container_width=True)
-
-    g5, g6 = st.columns(2)
-    with g5:
-        if not f.fcf_history.empty:
-            fig = go.Figure(go.Bar(x=year_index(f.fcf_history), y=f.fcf_history.values,
-                marker_color=["#16a34a" if v>=0 else "#ef4444" for v in f.fcf_history.values]))
-            fig.update_layout(**dark_layout("Free Cash Flow"))
-            st.plotly_chart(fig, use_container_width=True)
-    with g6:
-        if not f.revenue_history.empty:
-            fig = go.Figure(go.Bar(x=year_index(f.revenue_history), y=f.revenue_history.values,
-                                   marker_color="#3b82f6"))
-            fig.update_layout(**dark_layout("Revenue"))
-            st.plotly_chart(fig, use_container_width=True)
+            out.append(str(d))
+    return out
 
 
-def render_checklist(f: Fundamentals, mos, color):
-    items = quality_checklist(f)
-    passed = sum(1 for i in items if i["pass"])
-    st.markdown(f"### AUTO-CHECKLIST — {passed}/{len(items)} PASS")
+# ─── Header (theme toggle + title) ──────────────────────────────────────────
+hdr_l, hdr_r = st.columns([6, 1])
+with hdr_l:
+    st.markdown("# ● Stock Analyser")
+    st.markdown(f"<span class='muted'>Buffett-style fundamentals · live data · auto-DCF</span>",
+                unsafe_allow_html=True)
+with hdr_r:
+    label = "🌙 Dark" if THEME == "light" else "☀️ Light"
+    if st.button(label, use_container_width=True):
+        st.session_state.theme = "dark" if THEME == "light" else "light"
+        st.rerun()
 
-    rows = ['<div class="tranche-row head"><div>STATUS</div><div>CHECK</div><div>VALUE</div></div>']
-    for i in items:
-        icon = '<span class="chk-pass">✓ PASS</span>' if i["pass"] else '<span class="chk-fail">✗ FAIL</span>'
-        rows.append(f"""<div class="tranche-row" style="grid-template-columns: 0.7fr 2fr 1fr">
-          <div>{icon}</div><div>{i["check"]}</div><div>{i["value"]}</div></div>""")
-    st.markdown("".join(rows), unsafe_allow_html=True)
+st.markdown("")
 
-    # MoS gauge
-    if mos is not None:
-        gauge_val = max(min(mos, 80), -80)
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number", value=gauge_val, number={"suffix": "%"},
-            title={"text": "Margin of Safety"},
-            gauge={"axis": {"range": [-80, 80], "tickcolor": "#6b7280"},
-                   "bar": {"color": color},
-                   "bgcolor": "#0a0e0a", "borderwidth": 0,
-                   "steps": [{"range": [-80, 0], "color": "#7f1d1d"},
-                             {"range": [0, 25], "color": "#78350f"},
-                             {"range": [25, 80], "color": "#14532d"}],
-                   "threshold": {"line": {"color": "white", "width": 3}, "value": 25}}))
-        fig.update_layout(**dark_layout("", height=260))
-        st.plotly_chart(fig, use_container_width=True)
+# ─── Search ─────────────────────────────────────────────────────────────────
+sc_l, sc_r = st.columns([5, 1])
+with sc_l:
+    query = st.text_input("Ticker or company name",
+                          placeholder="e.g. AAPL, MSFT, KO, BHP, CBA",
+                          label_visibility="collapsed")
+with sc_r:
+    go_btn = st.button("Analyse", type="primary", use_container_width=True)
 
-    st.markdown("### QUALITATIVE — TICK WHAT YOU'VE VERIFIED")
-    qa = [
-        "Wide moat (brand, network, switching costs, scale)",
-        "Honest, capital-disciplined management",
-        "Held up through 2008 / 2020 recessions",
-        "Customer base diversified (no >20% concentration)",
-        "Not a commodity / cyclical business",
-        "Within your circle of competence",
-        "Position size sane (≤10% of portfolio)",
-    ]
-    for q in qa:
-        st.checkbox(q, key=f"qa_{q}")
-
-
-# ─── MAIN ───────────────────────────────────────────────────────────────────
-st.markdown('<div class="tprompt" style="font-size:0.8rem; color:#16a34a; letter-spacing:0.2em;">BUFFETT_TERMINAL@v2 :: live_feed</div>',
-            unsafe_allow_html=True)
-st.markdown("# ◉ Stock Analyser")
-
-if not run:
-    st.markdown("""
-    <div class="tcard" style="text-align:center; padding:2rem;">
-      <div class="tlabel">READY</div>
-      <div class="tvalue green">> awaiting ticker</div>
-      <div class="tsub">Enter a US or ASX ticker in the sidebar and hit ANALYSE.</div>
+if not query or not go_btn:
+    st.markdown(f"""
+    <div class='card' style='text-align:center; padding: 2.5rem;'>
+      <div style='font-size: 2rem; margin-bottom: 0.5rem;'>●</div>
+      <div style='font-size: 1.05rem; font-weight: 600; color: {P['text']};'>Type a ticker to begin</div>
+      <div class='muted' style='margin-top: 0.5rem;'>
+        Examples: <b>AAPL</b>, <b>MSFT</b> (US) · <b>BHP</b>, <b>CBA</b> (ASX, auto-detected)
+      </div>
     </div>
     """, unsafe_allow_html=True)
     st.stop()
 
-ticker = normalize_ticker(ticker_input, market)
-with st.spinner(f"> fetching {ticker}…"):
+with st.spinner("Loading…"):
     try:
-        f = fetch(ticker)
+        f = smart_fetch(query)
     except Exception as e:
-        st.error(f"Could not load {ticker}: {e}")
+        st.error(f"Could not load `{query}`: {e}")
         st.stop()
 
 if f.price is None:
-    st.error(f"No price data for {ticker}. Check the ticker symbol.")
+    st.error(f"No price data for `{query}`. Check the ticker symbol.")
     st.stop()
 
+# ─── Compute everything once ────────────────────────────────────────────────
+A = auto_assumptions(f)
 intrinsic = dcf_intrinsic_value(
-    latest_fcf=f.fcf_latest,
-    shares_outstanding=f.shares_outstanding,
-    growth_rate=growth/100, discount_rate=discount/100,
-    terminal_growth=terminal/100, net_cash=f.net_cash or 0,
+    f.fcf_latest, f.shares_outstanding,
+    A["growth"], A["discount"], A["terminal"], A["years"], f.net_cash or 0,
 )
 mos = margin_of_safety(intrinsic, f.price)
-score, notes = buffett_score(f)
-verdict, color, reason = recommendation(mos, score)
+score = quality_score(f)
+verdict, vclass, reason = recommendation(mos, score)
+graham = graham_number(f.eps_ttm, f.book_value_per_share)
+graham_mos = ((graham - f.price) / graham * 100) if (graham and f.price) else None
+rev_growth = reverse_dcf_growth(f.price, f.fcf_latest, f.shares_outstanding,
+                                A["discount"], A["terminal"], A["years"], f.net_cash or 0)
+fcfy = fcf_yield(f.market_cap, f.fcf_latest)
+oey = fcf_yield(f.market_cap, f.owner_earnings_latest)
+insights = generate_insights(f, intrinsic, mos, rev_growth)
+ten_yr = ten_year_summary(f)
 
-render_header(f, mos, verdict, color, reason)
+# Day change
+change = None
+if f.price and f.prev_close:
+    change = (f.price - f.prev_close) / f.prev_close * 100
+chg_html = ""
+if change is not None:
+    cls = "day-change-pos" if change >= 0 else "day-change-neg"
+    sign = "+" if change >= 0 else ""
+    diff = f.price - f.prev_close
+    chg_html = f"<span class='{cls}'>{sign}{diff:.2f} ({sign}{change:.2f}%)</span>"
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["◉ OVERVIEW", "▤ FUNDAMENTALS", "$ VALUATION",
-                                         "▦ CHARTS", "✓ CHECKLIST"])
-with tab1: render_overview(f, intrinsic, mos, verdict, color, score)
-with tab2: render_fundamentals(f)
-with tab3: render_valuation(f, intrinsic, growth, discount, terminal, mos)
-with tab4: render_charts(f, intrinsic)
-with tab5: render_checklist(f, mos, color)
+vmap = {"positive": "v-positive", "warn": "v-warn", "negative": "v-negative", "neutral": "v-neutral"}
+vdot = {"positive": "●", "warn": "●", "negative": "●", "neutral": "●"}
+mos_label = f" · {mos:+.0f}% MoS" if mos is not None else ""
+
+st.markdown(f"""
+<div class='ticker-bar'>
+  <span class='ticker-sym'>{f.ticker}</span>
+  <span class='ticker-name'>{f.name}{(' · ' + f.sector) if f.sector else ''}</span>
+  <span style='margin-left:auto; display:flex; align-items:center; gap:0.9rem;'>
+    <span class='ticker-price'>{fmt_money(f.price, f.currency)}</span>
+    {chg_html}
+    <span class='verdict-pill {vmap[vclass]}'>{vdot[vclass]} {verdict}{mos_label}</span>
+  </span>
+</div>
+""", unsafe_allow_html=True)
+
+
+# ─── Tabs ───────────────────────────────────────────────────────────────────
+tab_overview, tab_financials, tab_valuation, tab_insights = st.tabs(
+    ["Overview", "Financials", "Valuation", "Insights"]
+)
+
+# ════════ OVERVIEW ══════════
+with tab_overview:
+    # 5-column metric groups
+    cols = st.columns(5)
+    with cols[0]:
+        st.markdown(metric_group("Valuation", [
+            ("Market Cap", fmt_money(f.market_cap, f.currency)),
+            ("P/E (TTM)", fmt_num(f.pe_ratio)),
+            ("Forward P/E", fmt_num(f.forward_pe)),
+            ("Price / Sales", fmt_num(f.price_to_sales)),
+            ("Price / Book", fmt_num(f.price_to_book)),
+            ("EV / EBITDA", fmt_num(f.ev_to_ebitda)),
+        ]), unsafe_allow_html=True)
+    with cols[1]:
+        st.markdown(metric_group("Cash Flow", [
+            ("FCF (latest)", fmt_money(f.fcf_latest, f.currency)),
+            ("FCF Yield", fmt_pct(fcfy)),
+            ("FCF Margin", fmt_pct(f.fcf_margin)),
+            ("Owner Earnings", fmt_money(f.owner_earnings_latest, f.currency)),
+            ("OE Yield", fmt_pct(oey)),
+            ("SBC Impact", fmt_pct(f.sbc_impact)),
+        ]), unsafe_allow_html=True)
+    with cols[2]:
+        st.markdown(metric_group("Margins & Growth", [
+            ("Gross Margin", fmt_pct(f.gross_margin)),
+            ("Operating Margin", fmt_pct(f.operating_margin)),
+            ("Profit Margin", fmt_pct(f.profit_margin)),
+            ("Revenue YoY", fmt_pct(f.revenue_growth_yoy)),
+            ("Earnings YoY", fmt_pct(f.earnings_growth_yoy)),
+            ("Revenue 5y CAGR", fmt_pct(f.revenue_growth)),
+        ]), unsafe_allow_html=True)
+    with cols[3]:
+        st.markdown(metric_group("Balance", [
+            ("Cash", fmt_money(f.total_cash, f.currency)),
+            ("Debt", fmt_money(f.total_debt, f.currency)),
+            ("Net Cash", fmt_money(f.net_cash, f.currency)),
+            ("Debt / Equity", fmt_num(f.de_latest)),
+            ("Current Ratio", fmt_num(f.current_ratio)),
+            ("Interest Coverage", fmt_num(f.interest_coverage)),
+        ]), unsafe_allow_html=True)
+    with cols[4]:
+        st.markdown(metric_group("Dividend", [
+            ("Yield", fmt_pct(f.dividend_yield)),
+            ("Payout Ratio", fmt_pct(f.payout_ratio)),
+            ("Annual Rate", fmt_money(f.dividend_rate, f.currency)),
+            ("Ex-Div Date", fmt_date(f.ex_dividend_date)),
+            ("Buyback Yield", fmt_pct(f.buyback_yield)),
+            ("Earnings", fmt_date(f.next_earnings)),
+        ]), unsafe_allow_html=True)
+
+    st.markdown("")
+    # Price chart + news
+    pc, nc = st.columns([2, 1])
+    with pc:
+        if not f.price_history.empty:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=f.price_history.index, y=f.price_history["Close"],
+                                     mode="lines",
+                                     line=dict(color=P["primary"], width=2),
+                                     fill="tozeroy",
+                                     fillcolor=f"{P['primary']}1a",
+                                     hovertemplate="%{y:.2f}<extra></extra>"))
+            if intrinsic:
+                fig.add_hline(y=intrinsic, line_dash="dot", line_color=P["positive"],
+                              line_width=1, annotation_text=f"Intrinsic {fmt_money(intrinsic, f.currency)}",
+                              annotation_position="top right",
+                              annotation_font=dict(color=P["positive"], size=10))
+            fig.update_layout(**chart_layout("Price · 5y", height=320))
+            fig.update_yaxes(rangemode="tozero")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.markdown('<div class="card">Price chart unavailable.</div>', unsafe_allow_html=True)
+    with nc:
+        st.markdown('<div class="card"><h4 style="margin:0 0 0.6rem 0;font-size:0.78rem;'
+                    'text-transform:uppercase;letter-spacing:0.06em;">Recent News</h4>',
+                    unsafe_allow_html=True)
+        if f.news:
+            for n in f.news[:5]:
+                title = n.get("title", "")
+                pub = n.get("publisher", "")
+                url = n.get("url", "")
+                t = n.get("time", "")
+                if isinstance(t, (int, float)):
+                    t = dt.datetime.fromtimestamp(t).strftime("%b %d")
+                elif isinstance(t, str) and "T" in t:
+                    t = t.split("T")[0]
+                link = f'<a href="{url}" target="_blank">{title}</a>' if url else title
+                st.markdown(f"""<div class="news-row">{link}
+                    <div class="news-meta">{pub}{' · ' + str(t) if t else ''}</div></div>""",
+                            unsafe_allow_html=True)
+        else:
+            st.markdown('<span class="muted">No recent headlines.</span>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ════════ FINANCIALS ══════════
+with tab_financials:
+    period = st.radio("Period", ["Annually", "Quarterly"], horizontal=True, label_visibility="collapsed")
+    use_q = period == "Quarterly"
+
+    series_map = {
+        "Revenue": (f.q_revenue if use_q else f.revenue_history, "#f59e0b"),
+        "EBITDA": (f.q_ebitda if use_q else f.ebitda_history, "#3b82f6"),
+        "Net Income": (f.q_net_income if use_q else f.net_income_history, "#fb923c"),
+        "Free Cash Flow": (f.q_fcf if use_q else f.fcf_history, "#f97316"),
+        "EPS": (f.q_eps if use_q else f.eps_history, "#eab308"),
+        "Operating Income": (f.q_operating_income if use_q else f.operating_income_history, "#10b981"),
+        "Gross Profit": (f.q_gross_profit if use_q else f.gross_profit_history, "#14b8a6"),
+    }
+
+    # 4 columns × 2 rows = 8 charts (Price + 7 series)
+    items = list(series_map.items())
+    rows = [items[0:4], items[4:8]] if len(items) > 4 else [items]
+    # Add price chart as first
+    price_chart = ("Price", (f.price_history, P["primary"]))
+    items = [price_chart] + items
+    rows = [items[0:4], items[4:8]]
+
+    for row in rows:
+        cols = st.columns(4)
+        for i, (name, (series, color)) in enumerate(row):
+            with cols[i]:
+                if name == "Price" and not series.empty:
+                    fig = go.Figure(go.Scatter(x=series.index, y=series["Close"], mode="lines",
+                                               line=dict(color=color, width=2),
+                                               hovertemplate="%{y:.2f}<extra></extra>"))
+                    fig.update_layout(**chart_layout(name, height=220))
+                    st.plotly_chart(fig, use_container_width=True)
+                elif hasattr(series, "empty") and not series.empty:
+                    x = quarter_x(series) if use_q else year_x(series)
+                    colors = [color if v >= 0 else P["negative"] for v in series.values]
+                    fig = go.Figure(go.Bar(x=x, y=series.values, marker_color=colors,
+                                           hovertemplate="%{y:,.2f}<extra></extra>"))
+                    fig.update_layout(**chart_layout(name, height=220))
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.markdown(f'<div class="card"><span class="muted">{name} unavailable</span></div>',
+                                unsafe_allow_html=True)
+
+    # 10-year summary table
+    st.markdown("")
+    st.markdown('<h2>10-Year Summary</h2>', unsafe_allow_html=True)
+    if not ten_yr.empty:
+        # Format large numbers
+        def _fmt_cell(v, label):
+            if pd.isna(v):
+                return "—"
+            if "%" in label:
+                return f"{v:.1f}%"
+            if "EPS" in label or "Equity" in label:
+                return f"{v:.2f}"
+            return fmt_money(v, f.currency)
+        formatted = ten_yr.copy()
+        for idx, lbl in enumerate(formatted.index):
+            formatted.iloc[idx] = [_fmt_cell(v, lbl) for v in formatted.iloc[idx]]
+        st.dataframe(formatted, use_container_width=True)
+    else:
+        st.markdown('<div class="card"><span class="muted">No multi-year data available.</span></div>',
+                    unsafe_allow_html=True)
+
+
+# ════════ VALUATION ══════════
+with tab_valuation:
+    # Verdict + reasoning card
+    st.markdown(f"""
+    <div class='card'>
+      <div style='display:flex; align-items:center; gap:0.8rem; margin-bottom:0.5rem;'>
+        <span class='verdict-pill {vmap[vclass]}'>{vdot[vclass]} {verdict}</span>
+        <span class='muted' style='font-size:0.86rem;'>{reason}</span>
+      </div>
+      <div class='muted' style='font-size:0.82rem; margin-top:0.6rem;'>
+        DCF assumptions auto-derived from this stock's history:
+        growth <b>{A['growth']*100:.1f}%</b> (5y FCF CAGR, capped 3–12%) ·
+        discount <b>{A['discount']*100:.0f}%</b> (Buffett's hurdle) ·
+        terminal growth <b>{A['terminal']*100:.1f}%</b> (long-run GDP).
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 3 valuation cards
+    cv = st.columns(3)
+    with cv[0]:
+        mos_str = f"{mos:+.1f}% MoS" if mos is not None else "—"
+        st.markdown(metric_group("DCF Intrinsic", [
+            ("Per share", fmt_money(intrinsic, f.currency)),
+            ("Margin of safety", mos_str),
+            ("Quality score", f"{score}/3"),
+        ]), unsafe_allow_html=True)
+    with cv[1]:
+        gmos = f"{graham_mos:+.1f}% MoS" if graham_mos is not None else "—"
+        st.markdown(metric_group("Graham Number", [
+            ("Per share", fmt_money(graham, f.currency)),
+            ("Margin of safety", gmos),
+            ("Cross-check", "Defensive investor"),
+        ]), unsafe_allow_html=True)
+    with cv[2]:
+        rg_str = fmt_pct(rev_growth)
+        rg_note = ("conservative" if rev_growth and rev_growth <= 8
+                   else "moderate" if rev_growth and rev_growth <= 15 else "aggressive")
+        st.markdown(metric_group("Reverse DCF", [
+            ("Implied growth", rg_str),
+            ("Read", rg_note if rev_growth else "—"),
+            ("Time horizon", "10 years"),
+        ]), unsafe_allow_html=True)
+
+    # Sensitivity grid
+    st.markdown("")
+    st.markdown('<h2>DCF Sensitivity</h2>', unsafe_allow_html=True)
+    if f.fcf_latest and f.shares_outstanding:
+        sens = dcf_sensitivity(f.fcf_latest, f.shares_outstanding,
+                               [0.04, 0.06, 0.08, 0.10, 0.12],
+                               [0.08, 0.09, 0.10, 0.11, 0.12],
+                               A["terminal"], A["years"], f.net_cash or 0)
+        if sens is not None:
+            st.markdown('<div class="muted" style="font-size:0.82rem; margin-bottom:0.4rem;">'
+                        'Rows = discount rate · Columns = growth rate · Values = intrinsic per share'
+                        '</div>', unsafe_allow_html=True)
+            try:
+                styled = sens.style.background_gradient(cmap="Greens", axis=None).format("{:,.2f}")
+                st.dataframe(styled, use_container_width=True)
+            except Exception:
+                st.dataframe(sens.applymap(lambda v: f"{v:,.2f}" if v else "—"),
+                             use_container_width=True)
+    else:
+        st.markdown('<div class="card"><span class="muted">Sensitivity grid unavailable '
+                    '(no FCF or shares data).</span></div>', unsafe_allow_html=True)
+
+    # ROE / D/E history
+    st.markdown("")
+    cl, cr = st.columns(2)
+    with cl:
+        if not f.roe_history.empty:
+            colors = [P["positive"] if v >= 15 else P["warn"] if v >= 10 else P["negative"]
+                      for v in f.roe_history.values]
+            fig = go.Figure(go.Bar(x=year_x(f.roe_history), y=f.roe_history.values, marker_color=colors))
+            fig.add_hline(y=15, line_dash="dot", line_color=P["positive"], line_width=1)
+            fig.update_layout(**chart_layout("ROE % history", height=240))
+            st.plotly_chart(fig, use_container_width=True)
+    with cr:
+        if not f.de_history.empty:
+            colors = [P["positive"] if v <= 0.5 else P["warn"] if v <= 1 else P["negative"]
+                      for v in f.de_history.values]
+            fig = go.Figure(go.Bar(x=year_x(f.de_history), y=f.de_history.values, marker_color=colors))
+            fig.add_hline(y=0.5, line_dash="dot", line_color=P["positive"], line_width=1)
+            fig.update_layout(**chart_layout("Debt / Equity history", height=240))
+            st.plotly_chart(fig, use_container_width=True)
+
+
+# ════════ INSIGHTS ══════════
+with tab_insights:
+    ic1, ic2 = st.columns(2)
+    with ic1:
+        st.markdown(f'<h2 style="margin-bottom:0.4rem;">Competitive Advantages '
+                    f'<span class="insight-badge">Auto-generated</span></h2>',
+                    unsafe_allow_html=True)
+        if insights["advantages"]:
+            for item in insights["advantages"]:
+                st.markdown(f"""<div class="insight-card">
+                    <div class="insight-title">{item['title']}</div>
+                    <div class="insight-text">{item['text']}</div>
+                </div>""", unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="card"><span class="muted">No standout strengths detected '
+                        'from the available data.</span></div>', unsafe_allow_html=True)
+
+    with ic2:
+        st.markdown(f'<h2 style="margin-bottom:0.4rem;">Investment Risks '
+                    f'<span class="insight-badge">Auto-generated</span></h2>',
+                    unsafe_allow_html=True)
+        if insights["risks"]:
+            for item in insights["risks"]:
+                st.markdown(f"""<div class="insight-card">
+                    <div class="insight-title">{item['title']}</div>
+                    <div class="insight-text">{item['text']}</div>
+                </div>""", unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="card"><span class="muted">No major red flags detected. '
+                        'Always cross-check with qualitative judgement.</span></div>',
+                        unsafe_allow_html=True)
+
+    st.markdown("")
+    st.markdown('<h2>Things to verify yourself</h2>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="card">
+      <div class="metric-row"><span class="lbl">Wide moat</span>
+        <span class="val muted">brand, network effects, switching costs, scale</span></div>
+      <div class="metric-row"><span class="lbl">Honest, capital-disciplined management</span>
+        <span class="val muted">read shareholder letters, check insider activity</span></div>
+      <div class="metric-row"><span class="lbl">Recession resilience</span>
+        <span class="val muted">how did 2008 / 2020 earnings hold up?</span></div>
+      <div class="metric-row"><span class="lbl">Customer concentration</span>
+        <span class="val muted">no single customer >20% of revenue</span></div>
+      <div class="metric-row"><span class="lbl">Within your circle of competence</span>
+        <span class="val muted">if you can't explain it in a paragraph, skip it</span></div>
+      <div class="metric-row"><span class="lbl">Position size</span>
+        <span class="val muted">a great buy still shouldn't be >10% of your portfolio</span></div>
+    </div>
+    """, unsafe_allow_html=True)
