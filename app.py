@@ -22,7 +22,7 @@ from analyzer import (
     ten_year_summary,
 )
 
-st.set_page_config(page_title="Stock Analyser", page_icon="●", layout="wide",
+st.set_page_config(page_title="Stock Analyser", layout="wide",
                    initial_sidebar_state="collapsed")
 
 # ─── Theme state ────────────────────────────────────────────────────────────
@@ -226,11 +226,11 @@ def quarter_x(series: pd.Series):
 # ─── Header (theme toggle + title) ──────────────────────────────────────────
 hdr_l, hdr_r = st.columns([6, 1])
 with hdr_l:
-    st.markdown("# ● Stock Analyser")
+    st.markdown("# Stock Analyser")
     st.markdown(f"<span class='muted'>Buffett-style fundamentals · live data · auto-DCF</span>",
                 unsafe_allow_html=True)
 with hdr_r:
-    label = "🌙 Dark" if THEME == "light" else "☀️ Light"
+    label = "Dark" if THEME == "light" else "Light"
     if st.button(label, use_container_width=True):
         st.session_state.theme = "dark" if THEME == "light" else "light"
         st.rerun()
@@ -248,8 +248,7 @@ with sc_r:
 
 if not query or not go_btn:
     st.markdown(f"""
-    <div class='card' style='text-align:center; padding: 2.5rem;'>
-      <div style='font-size: 2rem; margin-bottom: 0.5rem;'>●</div>
+    <div class='card' style='text-align:center; padding: 2rem;'>
       <div style='font-size: 1.05rem; font-weight: 600; color: {P['text']};'>Type a ticker to begin</div>
       <div class='muted' style='margin-top: 0.5rem;'>
         Examples: <b>AAPL</b>, <b>MSFT</b> (US) · <b>BHP</b>, <b>CBA</b> (ASX, auto-detected)
@@ -299,7 +298,6 @@ if change is not None:
     chg_html = f"<span class='{cls}'>{sign}{diff:.2f} ({sign}{change:.2f}%)</span>"
 
 vmap = {"positive": "v-positive", "warn": "v-warn", "negative": "v-negative", "neutral": "v-neutral"}
-vdot = {"positive": "●", "warn": "●", "negative": "●", "neutral": "●"}
 def _mos_label(m):
     if m is None: return ""
     if m > 99: return " · >99% MoS"
@@ -314,7 +312,7 @@ st.markdown(f"""
   <span style='margin-left:auto; display:flex; align-items:center; gap:0.9rem;'>
     <span class='ticker-price'>{fmt_money(f.price, f.currency)}</span>
     {chg_html}
-    <span class='verdict-pill {vmap[vclass]}'>{vdot[vclass]} {verdict}{mos_label}</span>
+    <span class='verdict-pill {vmap[vclass]}'>{verdict}{mos_label}</span>
   </span>
 </div>
 """, unsafe_allow_html=True)
@@ -394,7 +392,7 @@ with tab_overview:
                               annotation_font=dict(color=P["positive"], size=10))
             fig.update_layout(**chart_layout("Price · 5y", height=320))
             fig.update_yaxes(rangemode="tozero")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         else:
             st.markdown('<div class="card">Price chart unavailable.</div>', unsafe_allow_html=True)
     with nc:
@@ -452,14 +450,14 @@ with tab_financials:
                                                line=dict(color=color, width=2),
                                                hovertemplate="%{y:.2f}<extra></extra>"))
                     fig.update_layout(**chart_layout(name, height=220))
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
                 elif hasattr(series, "empty") and not series.empty:
                     x = quarter_x(series) if use_q else year_x(series)
                     colors = [color if v >= 0 else P["negative"] for v in series.values]
                     fig = go.Figure(go.Bar(x=x, y=series.values, marker_color=colors,
                                            hovertemplate="%{y:,.2f}<extra></extra>"))
                     fig.update_layout(**chart_layout(name, height=220))
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
                 else:
                     st.markdown(f'<div class="card"><span class="muted">{name} unavailable</span></div>',
                                 unsafe_allow_html=True)
@@ -477,9 +475,11 @@ with tab_financials:
             if "EPS" in label or "Equity" in label:
                 return f"{v:.2f}"
             return fmt_money(v, f.currency)
-        formatted = ten_yr.copy()
-        for idx, lbl in enumerate(formatted.index):
-            formatted.iloc[idx] = [_fmt_cell(v, lbl) for v in formatted.iloc[idx]]
+        formatted = pd.DataFrame(
+            {col: [_fmt_cell(ten_yr.at[lbl, col], lbl) for lbl in ten_yr.index]
+             for col in ten_yr.columns},
+            index=ten_yr.index,
+        )
         st.dataframe(formatted, use_container_width=True)
     else:
         st.markdown('<div class="card"><span class="muted">No multi-year data available.</span></div>',
@@ -494,7 +494,7 @@ with tab_valuation:
     st.markdown(f"""
     <div class='card'>
       <div style='display:flex; align-items:center; gap:0.8rem; margin-bottom:0.5rem;'>
-        <span class='verdict-pill {vmap[vclass]}'>{vdot[vclass]} {verdict}</span>
+        <span class='verdict-pill {vmap[vclass]}'>{verdict}</span>
         <span class='muted' style='font-size:0.86rem;'>{reason}</span>
       </div>
       <div class='muted' style='font-size:0.82rem; margin-top:0.6rem;'>
@@ -563,11 +563,11 @@ with tab_valuation:
             ("Time horizon", "10 years"),
         ]), unsafe_allow_html=True)
 
-    # Sensitivity grid
+    # Sensitivity heatmap
     st.markdown("")
     st.markdown('<h2>DCF Sensitivity</h2>', unsafe_allow_html=True)
-    if f.fcf_latest and f.shares_outstanding:
-        sens = dcf_sensitivity(f.fcf_latest, f.shares_outstanding,
+    if A.get("fcf") and f.shares_outstanding:
+        sens = dcf_sensitivity(A["fcf"], f.shares_outstanding,
                                [0.04, 0.06, 0.08, 0.10, 0.12],
                                [0.08, 0.09, 0.10, 0.11, 0.12],
                                A["terminal"], A["years"], f.net_cash or 0)
@@ -575,12 +575,19 @@ with tab_valuation:
             st.markdown('<div class="muted" style="font-size:0.82rem; margin-bottom:0.4rem;">'
                         'Rows = discount rate · Columns = growth rate · Values = intrinsic per share'
                         '</div>', unsafe_allow_html=True)
-            try:
-                styled = sens.style.background_gradient(cmap="Greens", axis=None).format("{:,.2f}")
-                st.dataframe(styled, use_container_width=True)
-            except Exception:
-                st.dataframe(sens.applymap(lambda v: f"{v:,.2f}" if v else "—"),
-                             use_container_width=True)
+            text = [[f"{v:,.0f}" if v is not None else "—" for v in row] for row in sens.values]
+            fig = go.Figure(data=go.Heatmap(
+                z=sens.values, x=list(sens.columns), y=list(sens.index),
+                colorscale=[[0, P["subtle"]], [1, P["positive"]]],
+                text=text, texttemplate="%{text}",
+                textfont={"size": 11, "color": P["text"]},
+                hoverongaps=False,
+                colorbar=dict(thickness=10, len=0.7),
+            ))
+            fig.update_layout(**chart_layout("", height=280),
+                              xaxis_title="Growth rate",
+                              yaxis_title="Discount rate")
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     else:
         st.markdown('<div class="card"><span class="muted">Sensitivity grid unavailable '
                     '(no FCF or shares data).</span></div>', unsafe_allow_html=True)
@@ -595,7 +602,7 @@ with tab_valuation:
             fig = go.Figure(go.Bar(x=year_x(f.roe_history), y=f.roe_history.values, marker_color=colors))
             fig.add_hline(y=15, line_dash="dot", line_color=P["positive"], line_width=1)
             fig.update_layout(**chart_layout("ROE % history", height=240))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     with cr:
         if not f.de_history.empty:
             colors = [P["positive"] if v <= 0.5 else P["warn"] if v <= 1 else P["negative"]
@@ -603,7 +610,7 @@ with tab_valuation:
             fig = go.Figure(go.Bar(x=year_x(f.de_history), y=f.de_history.values, marker_color=colors))
             fig.add_hline(y=0.5, line_dash="dot", line_color=P["positive"], line_width=1)
             fig.update_layout(**chart_layout("Debt / Equity history", height=240))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 # ════════ INSIGHTS ══════════
