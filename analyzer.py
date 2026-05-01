@@ -191,6 +191,10 @@ class Fundamentals:
     sbc_impact: Optional[float] = None
     buyback_yield: Optional[float] = None
 
+    # Data source diagnostics
+    edgar_years: Optional[int] = None     # # of distinct fiscal years pulled from EDGAR
+    edgar_status: str = "not attempted"   # "ok" | "not attempted" | error message
+
 
 # ─── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -454,14 +458,20 @@ def _apply_edgar_history(f: Fundamentals) -> None:
     """Pull 10-year XBRL annual data from SEC EDGAR and replace short yfinance series.
 
     Silent no-op if the ticker is not in EDGAR (foreign filer, ETF, fund) or the
-    request fails — we keep whatever yfinance gave us.
+    request fails — we keep whatever yfinance gave us. Diagnostic info is stored
+    on the Fundamentals so the UI can show whether EDGAR succeeded.
     """
     try:
         hist = edgar.fetch_history(f.ticker)
-    except Exception:
-        hist = {}
-    if not hist:
+    except Exception as exc:
+        f.edgar_status = f"exception: {exc}"
         return
+    if not hist:
+        f.edgar_status = edgar.last_error() or "no data"
+        return
+    f.edgar_status = "ok"
+    # Pick the longest series as the "years available" indicator.
+    f.edgar_years = max(len(s) for s in hist.values())
 
     rev = hist.get("revenue")
     ni = hist.get("net_income")
@@ -872,7 +882,7 @@ def ten_year_summary(f: Fundamentals) -> pd.DataFrame:
     df = pd.DataFrame(rows).T
     # Format columns as years
     df.columns = [c.year if hasattr(c, "year") else str(c) for c in df.columns]
-    # Keep last 10 columns
-    if df.shape[1] > 10:
-        df = df.iloc[:, -10:]
+    # Keep at most 12 most-recent columns (a decade plus a couple)
+    if df.shape[1] > 12:
+        df = df.iloc[:, -12:]
     return df
