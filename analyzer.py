@@ -450,12 +450,29 @@ def fetch(ticker: str) -> Fundamentals:
 # ─── Auto-DCF ───────────────────────────────────────────────────────────────
 
 def auto_assumptions(f: Fundamentals) -> dict:
-    """Sensible defaults: discount 10%, terminal 2.5%, growth = clipped historical FCF CAGR."""
+    """Realistic DCF inputs derived from history.
+
+    - Normalised FCF: 3-year mean (smooths out lumpy capex years).
+    - Growth: historical FCF CAGR clipped to 3-18%.
+    - Discount: 10% (long-run equity hurdle).
+    - Terminal growth: 2.5% (long-run GDP).
+    """
+    if not f.fcf_history.empty and len(f.fcf_history) >= 3:
+        normalized_fcf = float(f.fcf_history.tail(3).mean())
+    else:
+        normalized_fcf = f.fcf_latest
+
     growth = f.fcf_growth if f.fcf_growth is not None else f.eps_growth
     if growth is None:
         growth = 6.0
-    growth = float(max(3.0, min(12.0, growth)))
-    return {"growth": growth / 100, "discount": 0.10, "terminal": 0.025, "years": 10}
+    growth = float(max(3.0, min(18.0, growth)))
+    return {
+        "growth": growth / 100,
+        "discount": 0.10,
+        "terminal": 0.025,
+        "years": 10,
+        "fcf": normalized_fcf,
+    }
 
 
 def dcf_intrinsic_value(latest_fcf, shares_outstanding, growth_rate=0.08,
@@ -543,13 +560,47 @@ def quality_score(f: Fundamentals) -> int:
 
 
 def recommendation(mos, score) -> tuple[str, str, str]:
+    """Quality-adjusted verdict.
+
+    Strong businesses (score >=2) get a softer 'OVERVALUED — wait for pullback'
+    instead of a screaming AVOID; only weak businesses trading above intrinsic
+    get AVOID.
+    """
     if mos is None:
-        return "NO DATA", "neutral", "Insufficient financial data to compute a verdict."
-    if mos >= 25 and score >= 2:
-        return "BUY", "positive", f"Trading {mos:.0f}% below intrinsic value with {score}/3 quality flags."
+        return "NO DATA", "neutral", "Not enough financial data to value this stock."
+
+    if score >= 2:  # quality business
+        if mos >= 25:
+            return "BUY", "positive", (
+                f"{mos:.0f}% margin of safety on a quality business "
+                f"({score}/3 Buffett flags)."
+            )
+        if mos >= -15:
+            return "HOLD", "warn", (
+                f"Quality business near fair value ({mos:+.0f}% vs DCF). "
+                f"Reasonable to hold, modest premium acceptable."
+            )
+        return "OVERVALUED", "negative", (
+            f"Strong business, but priced ~{abs(mos):.0f}% above DCF intrinsic. "
+            f"Consider waiting for a pullback or confirm growth thesis exceeds "
+            f"the model's assumptions."
+        )
+
+    # weaker quality
+    if mos >= 40:
+        return "DEEP VALUE", "warn", (
+            f"Cheap on DCF ({mos:.0f}% MoS) but only {score}/3 quality flags — "
+            f"verify the growth thesis and check for value-trap signals."
+        )
     if mos >= 0:
-        return "HOLD", "warn", f"Within fair-value range — {mos:.0f}% margin of safety."
-    return "AVOID", "negative", f"Trading {abs(mos):.0f}% above intrinsic value."
+        return "HOLD", "warn", (
+            f"Fair value ({mos:.0f}% MoS) but quality concerns — "
+            f"only {score}/3 Buffett flags."
+        )
+    return "AVOID", "negative", (
+        f"~{abs(mos):.0f}% above DCF intrinsic with weak quality scores "
+        f"({score}/3) — risk of permanent capital loss."
+    )
 
 
 # ─── Heuristic insights ─────────────────────────────────────────────────────
