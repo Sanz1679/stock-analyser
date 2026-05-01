@@ -1,4 +1,8 @@
-"""Buffett-style analysis: fundamentals, auto-DCF, insights, 10-year summary."""
+"""Buffett-style analysis: fundamentals, auto-DCF, insights, 10-year summary.
+
+US-only. Live price + ratios + quarterly data come from yfinance; long-form
+annual history (10+ years) comes from SEC EDGAR XBRL.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,6 +11,8 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import yfinance as yf
+
+import edgar
 
 
 ALIASES = {
@@ -75,35 +81,28 @@ def _stability(series: pd.Series) -> Optional[float]:
 # ─── Ticker resolution ──────────────────────────────────────────────────────
 
 def resolve_ticker(query: str) -> str:
-    """Resolve user input to a yfinance ticker. Tries direct, then ASX, then search."""
+    """Resolve user input to a US ticker symbol."""
     q = (query or "").strip()
     if not q:
         return ""
-    # Looks like a plain ticker
-    if len(q) <= 6 and " " not in q and "." not in q:
+    if len(q) <= 6 and " " not in q:
         return q.upper()
-    if "." in q:
-        return q.upper()
-    # Looks like a name — try search
     try:
         s = yf.Search(q, max_results=1)
         quotes = getattr(s, "quotes", None) or []
         if quotes:
-            return quotes[0].get("symbol", q).upper()
+            sym = quotes[0].get("symbol", q).upper()
+            # Reject anything with an exchange suffix — this is a US-only tool.
+            if "." not in sym:
+                return sym
     except Exception:
         pass
     return q.upper()
 
 
 def smart_fetch(query: str) -> "Fundamentals":
-    """Try ticker as-is; if no price, try ASX (.AX). Returns a Fundamentals."""
-    sym = resolve_ticker(query)
-    f = fetch(sym)
-    if f.price is None and not sym.endswith(".AX") and "." not in sym:
-        alt = fetch(f"{sym}.AX")
-        if alt.price is not None:
-            return alt
-    return f
+    """Resolve and fetch a US ticker. Returns Fundamentals (price may be None on failure)."""
+    return fetch(resolve_ticker(query))
 
 
 # ─── Data class ─────────────────────────────────────────────────────────────
@@ -112,7 +111,7 @@ def smart_fetch(query: str) -> "Fundamentals":
 class Fundamentals:
     ticker: str
     name: str = ""
-    currency: str = "USD"
+    currency: str = "USD"  # always USD — this is a US-only analyser
     sector: str = ""
     industry: str = ""
     price: Optional[float] = None
@@ -211,7 +210,7 @@ def fetch(ticker: str) -> Fundamentals:
 
     f = Fundamentals(ticker=ticker)
     f.name = _safe(info, "longName", "shortName", default=ticker) or ticker
-    f.currency = _safe(info, "currency", default="USD") or "USD"
+    f.currency = "USD"
     f.sector = _safe(info, "sector", default="") or ""
     f.industry = _safe(info, "industry", default="") or ""
     f.price = _safe(info, "currentPrice", "regularMarketPrice", "previousClose")
@@ -444,7 +443,148 @@ def fetch(ticker: str) -> Fundamentals:
     if q_fcf is not None:
         f.q_fcf = q_fcf.sort_index()
 
+    # Overlay 10+ year SEC EDGAR data where available — replaces yfinance
+    # short histories with the full XBRL record for US filers.
+    _apply_edgar_history(f)
+
     return f
+
+
+def _apply_edgar_history(f: Fundamentals) -> None:
+    """Pull 10-year XBRL annual data from SEC EDGAR and replace short yfinance series.
+
+    Silent no-op if the ticker is not in EDGAR (foreign filer, ETF, fund) or the
+    request fails — we keep whatever yfinance gave us.
+    """
+    try:
+        hist = edgar.fetch_history(f.ticker)
+    except Exception:
+        hist = {}
+    if not hist:
+        return
+
+    rev = hist.get("revenue")
+    ni = hist.get("net_income")
+    gp = hist.get("gross_profit")
+    oi = hist.get("operating_income")
+    eq = hist.get("equity")
+    ocf = hist.get("operating_cf")
+    capex = hist.get("capex")
+    eps_d = hist.get("eps_diluted") or hist.get("eps_basic")
+    da = hist.get("depreciation")
+    sbc = hist.get("sbc")
+    shares = hist.get("shares_diluted") or hist.get("shares_outstanding")
+    ltd = hist.get("long_term_debt")
+    std = hist.get("short_term_debt")
+    int_exp = hist.get("interest_expense")
+
+    if rev is not None:
+        f.revenue_history = rev.sort_index()
+        f.revenue_growth = _cagr(f.revenue_history)
+    if ni is not None:
+        f.net_income_history = ni.sort_index()
+    if gp is not None:
+        f.gross_profit_history = gp.sort_index()
+        if rev is not None:
+            idx = gp.index.intersection(rev.index)
+            if len(idx):
+                f.gross_margin_history = (gp.loc[idx] / rev.loc[idx] * 100).sort_index()
+    if oi is not None:
+        f.operating_income_history = oi.sort_index()
+        if rev is not None:
+            idx = oi.index.intersection(rev.index)
+            if len(idx):
+                f.operating_margin_history = (oi.loc[idx] / rev.loc[idx] * 100).sort_index()
+
+    # FCF = operating cash flow - capex (capex reported positive in EDGAR cash-flow)
+    if ocf is not None and capex is not None:
+        idx = ocf.index.intersection(capex.index)
+        if len(idx):
+            fcf = (ocf.loc[idx] - capex.loc[idx]).dropna().sort_index()
+            f.fcf_history = fcf
+            if not fcf.empty:
+                f.fcf_latest = float(fcf.iloc[-1])
+                f.fcf_growth = _cagr(fcf)
+            if rev is not None and not fcf.empty:
+                latest_rev = rev.sort_index().iloc[-1]
+                if latest_rev and latest_rev > 0:
+                    f.fcf_margin = float(fcf.iloc[-1]) / float(latest_rev) * 100
+
+    # EBITDA = Operating Income + D&A
+    if oi is not None and da is not None:
+        idx = oi.index.intersection(da.index)
+        if len(idx):
+            f.ebitda_history = (oi.loc[idx] + da.loc[idx]).sort_index()
+
+    # ROE = Net Income / Equity
+    if ni is not None and eq is not None:
+        idx = ni.index.intersection(eq.index)
+        idx = [i for i in idx if eq.loc[i] and eq.loc[i] != 0]
+        if idx:
+            roe = (ni.loc[idx] / eq.loc[idx] * 100).sort_index()
+            f.roe_history = roe
+            f.roe_avg = float(roe.tail(5).mean())
+
+    # Debt / Equity
+    debt = None
+    if ltd is not None and std is not None:
+        idx = ltd.index.intersection(std.index)
+        if len(idx):
+            debt = (ltd.loc[idx] + std.loc[idx]).sort_index()
+    elif ltd is not None:
+        debt = ltd.sort_index()
+    elif std is not None:
+        debt = std.sort_index()
+    if debt is not None and eq is not None:
+        idx = debt.index.intersection(eq.index)
+        idx = [i for i in idx if eq.loc[i] and eq.loc[i] != 0]
+        if idx:
+            de = (debt.loc[idx] / eq.loc[idx]).sort_index()
+            f.de_history = de
+            if not de.empty:
+                f.de_latest = float(de.iloc[-1])
+
+    # EPS series (per-share, already)
+    if eps_d is not None:
+        f.eps_history = eps_d.sort_index()
+        f.eps_growth = _cagr(f.eps_history)
+        f.earnings_stability = _stability(f.eps_history)
+
+    # Owner earnings = Net Income + D&A - CapEx
+    if ni is not None and capex is not None:
+        idx = ni.index.intersection(capex.index)
+        if da is not None:
+            idx2 = idx.intersection(da.index) if hasattr(idx, "intersection") else idx
+            if len(idx2):
+                oe = (ni.loc[idx2] + da.loc[idx2] - capex.loc[idx2]).sort_index()
+                f.owner_earnings_history = oe
+                f.owner_earnings_latest = float(oe.iloc[-1])
+        elif len(idx):
+            oe = (ni.loc[idx] - capex.loc[idx]).sort_index()
+            f.owner_earnings_history = oe
+            f.owner_earnings_latest = float(oe.iloc[-1])
+
+    # SBC
+    if sbc is not None:
+        f.sbc_history = sbc.sort_index()
+        if f.fcf_latest and f.fcf_latest > 0:
+            latest_sbc = float(f.sbc_history.iloc[-1])
+            f.sbc_impact = latest_sbc / f.fcf_latest * 100
+
+    # Shares + buyback yield
+    if shares is not None:
+        f.shares_history = shares.sort_index()
+        if len(shares) >= 2:
+            first, last = shares.iloc[0], shares.iloc[-1]
+            if first and first > 0:
+                f.buyback_yield = (first - last) / first * 100 / max(len(shares) - 1, 1)
+
+    # Interest coverage (latest year)
+    if oi is not None and int_exp is not None and not oi.empty and not int_exp.empty:
+        latest_oi = float(oi.sort_index().iloc[-1])
+        latest_ie = abs(float(int_exp.sort_index().iloc[-1]))
+        if latest_ie > 0:
+            f.interest_coverage = latest_oi / latest_ie
 
 
 # ─── Auto-DCF ───────────────────────────────────────────────────────────────
@@ -704,11 +844,10 @@ def generate_insights(f: Fundamentals, intrinsic, mos, reverse_growth) -> dict:
 def _money(x, currency="USD"):
     if x is None:
         return "—"
-    sym = {"USD": "$", "AUD": "A$"}.get(currency, "")
-    if abs(x) >= 1e12: return f"{sym}{x/1e12:.2f}T"
-    if abs(x) >= 1e9:  return f"{sym}{x/1e9:.2f}B"
-    if abs(x) >= 1e6:  return f"{sym}{x/1e6:.2f}M"
-    return f"{sym}{x:,.2f}"
+    if abs(x) >= 1e12: return f"${x/1e12:.2f}T"
+    if abs(x) >= 1e9:  return f"${x/1e9:.2f}B"
+    if abs(x) >= 1e6:  return f"${x/1e6:.2f}M"
+    return f"${x:,.2f}"
 
 
 # ─── 10-year summary ────────────────────────────────────────────────────────

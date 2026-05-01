@@ -169,11 +169,10 @@ def hex_rgba(hex_str: str, alpha: float = 0.1) -> str:
 
 def fmt_money(x, currency="USD"):
     if x is None: return "—"
-    sym = {"USD": "$", "AUD": "A$"}.get(currency, "")
-    if abs(x) >= 1e12: return f"{sym}{x/1e12:.2f}T"
-    if abs(x) >= 1e9:  return f"{sym}{x/1e9:.2f}B"
-    if abs(x) >= 1e6:  return f"{sym}{x/1e6:.2f}M"
-    return f"{sym}{x:,.2f}"
+    if abs(x) >= 1e12: return f"${x/1e12:.2f}T"
+    if abs(x) >= 1e9:  return f"${x/1e9:.2f}B"
+    if abs(x) >= 1e6:  return f"${x/1e6:.2f}M"
+    return f"${x:,.2f}"
 
 def fmt_pct(x, decimals=2):
     return f"{x:.{decimals}f}%" if x is not None else "—"
@@ -226,8 +225,8 @@ def quarter_x(series: pd.Series):
 # ─── Header (theme toggle + title) ──────────────────────────────────────────
 hdr_l, hdr_r = st.columns([6, 1])
 with hdr_l:
-    st.markdown("# Stock Analyser")
-    st.markdown(f"<span class='muted'>Buffett-style fundamentals · live data · auto-DCF</span>",
+    st.markdown("# US Stock Analyser")
+    st.markdown(f"<span class='muted'>Buffett-style fundamentals · 10-year SEC EDGAR history · auto-DCF</span>",
                 unsafe_allow_html=True)
 with hdr_r:
     label = "Dark" if THEME == "light" else "Light"
@@ -240,8 +239,8 @@ st.markdown("")
 # ─── Search ─────────────────────────────────────────────────────────────────
 sc_l, sc_r = st.columns([5, 1])
 with sc_l:
-    query = st.text_input("Ticker or company name",
-                          placeholder="e.g. AAPL, MSFT, KO, BHP, CBA",
+    query = st.text_input("US ticker or company name",
+                          placeholder="e.g. AAPL, MSFT, KO, BRK-B, JNJ",
                           label_visibility="collapsed")
 with sc_r:
     go_btn = st.button("Analyse", type="primary", use_container_width=True)
@@ -249,9 +248,10 @@ with sc_r:
 if not query or not go_btn:
     st.markdown(f"""
     <div class='card' style='text-align:center; padding: 2rem;'>
-      <div style='font-size: 1.05rem; font-weight: 600; color: {P['text']};'>Type a ticker to begin</div>
+      <div style='font-size: 1.05rem; font-weight: 600; color: {P['text']};'>Type a US ticker to begin</div>
       <div class='muted' style='margin-top: 0.5rem;'>
-        Examples: <b>AAPL</b>, <b>MSFT</b> (US) · <b>BHP</b>, <b>CBA</b> (ASX, auto-detected)
+        Examples: <b>AAPL</b>, <b>MSFT</b>, <b>KO</b>, <b>JNJ</b>, <b>BRK-B</b>
+        · 10 years of fundamentals pulled live from SEC EDGAR.
       </div>
     </div>
     """, unsafe_allow_html=True)
