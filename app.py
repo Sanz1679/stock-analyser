@@ -317,6 +317,19 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# Data-source banner — tells the user whether SEC EDGAR returned 10-year data
+# or whether we fell back to the shorter yfinance history.
+if f.edgar_status == "ok" and f.edgar_years:
+    src_html = (f"<span class='muted' style='font-size:0.78rem;'>"
+                f"Live price: yfinance · Annual history: SEC EDGAR "
+                f"<b>({f.edgar_years} fiscal years)</b></span>")
+else:
+    src_html = (f"<span class='muted' style='font-size:0.78rem;'>"
+                f"Live price: yfinance · Annual history: yfinance fallback "
+                f"<span style='color:{P['warn']};'>(EDGAR unavailable: {f.edgar_status})</span></span>")
+st.markdown(src_html, unsafe_allow_html=True)
+st.markdown("")
+
 
 # ─── Tabs ───────────────────────────────────────────────────────────────────
 tab_overview, tab_financials, tab_valuation, tab_insights = st.tabs(
