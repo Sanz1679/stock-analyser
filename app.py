@@ -32,129 +32,265 @@ THEME = st.session_state.theme
 
 PALETTES = {
     "light": {
-        "bg": "#f8fafc", "card": "#ffffff", "text": "#0f172a", "muted": "#64748b",
-        "border": "#e2e8f0", "subtle": "#f1f5f9",
-        "primary": "#2563eb", "positive": "#059669", "warn": "#d97706",
-        "negative": "#dc2626", "neutral": "#94a3b8",
+        "bg": "#f0f4f8", "card": "#ffffff", "text": "#0f172a", "muted": "#64748b",
+        "border": "#dde3ec", "subtle": "#f1f5f9",
+        "primary": "#2563eb", "primary_muted": "#eff6ff",
+        "positive": "#059669", "positive_muted": "#dcfce7",
+        "warn": "#d97706", "warn_muted": "#fef3c7",
+        "negative": "#dc2626", "negative_muted": "#fee2e2",
+        "neutral": "#94a3b8",
         "chart_bg": "#ffffff", "plotly_template": "plotly_white",
-        "shadow": "0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04)",
+        "shadow": "0 1px 3px rgba(15,23,42,0.08), 0 4px 12px rgba(15,23,42,0.04)",
+        "shadow_lg": "0 4px 24px rgba(15,23,42,0.10), 0 1px 4px rgba(15,23,42,0.06)",
+        "gradient_start": "#2563eb", "gradient_end": "#7c3aed",
     },
     "dark": {
-        "bg": "#0b1120", "card": "#111827", "text": "#e5e7eb", "muted": "#9ca3af",
-        "border": "#1f2937", "subtle": "#0f172a",
-        "primary": "#60a5fa", "positive": "#34d399", "warn": "#fbbf24",
-        "negative": "#f87171", "neutral": "#6b7280",
+        "bg": "#0a0f1e", "card": "#111827", "text": "#e5e7eb", "muted": "#9ca3af",
+        "border": "#1e2d40", "subtle": "#0f172a",
+        "primary": "#60a5fa", "primary_muted": "#1e3a5f",
+        "positive": "#34d399", "positive_muted": "#064e3b",
+        "warn": "#fbbf24", "warn_muted": "#78350f",
+        "negative": "#f87171", "negative_muted": "#7f1d1d",
+        "neutral": "#6b7280",
         "chart_bg": "#111827", "plotly_template": "plotly_dark",
-        "shadow": "0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3)",
+        "shadow": "0 1px 3px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.3)",
+        "shadow_lg": "0 4px 24px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.4)",
+        "gradient_start": "#60a5fa", "gradient_end": "#a78bfa",
     },
 }
 P = PALETTES[THEME]
 
 CSS = f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+*, *::before, *::after {{ box-sizing: border-box; }}
 
 html, body, [class*="css"], .stApp, p, span, div, label, button, input, textarea, h1, h2, h3, h4, h5, h6 {{
     font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
 }}
 .stApp, .main {{ background: {P['bg']} !important; }}
-.block-container {{ padding-top: 3.5rem !important; padding-bottom: 4rem !important; max-width: 1280px !important; }}
+.block-container {{ padding-top: 2.5rem !important; padding-bottom: 4rem !important; max-width: 1320px !important; }}
 
-h1 {{ color: {P['text']} !important; font-weight: 600 !important; font-size: 1.5rem !important; margin: 0 !important; }}
-h2 {{ color: {P['text']} !important; font-weight: 600 !important; font-size: 1.05rem !important; margin: 0.5rem 0 0.6rem !important; }}
+/* ── Scrollbar ── */
+::-webkit-scrollbar {{ width: 6px; height: 6px; }}
+::-webkit-scrollbar-track {{ background: transparent; }}
+::-webkit-scrollbar-thumb {{ background: {P['border']}; border-radius: 3px; }}
+::-webkit-scrollbar-thumb:hover {{ background: {P['muted']}; }}
+
+h1 {{ color: {P['text']} !important; font-weight: 700 !important; font-size: 1.55rem !important; margin: 0 !important; letter-spacing: -0.02em; }}
+h2 {{ color: {P['text']} !important; font-weight: 600 !important; font-size: 1.0rem !important; margin: 0.5rem 0 0.6rem !important; }}
 h3 {{ color: {P['text']} !important; font-weight: 600 !important; font-size: 0.95rem !important; }}
 p, label, span, div {{ color: {P['text']}; }}
 .muted {{ color: {P['muted']} !important; }}
 
+/* ── Cards ── */
 .card {{
-    background: {P['card']}; border: 1px solid {P['border']}; border-radius: 10px;
-    padding: 1rem 1.1rem; box-shadow: {P['shadow']}; margin-bottom: 0.75rem;
+    background: {P['card']}; border: 1px solid {P['border']}; border-radius: 14px;
+    padding: 1.1rem 1.25rem; box-shadow: {P['shadow']}; margin-bottom: 0.75rem;
+    transition: box-shadow 0.15s ease;
 }}
+.card:hover {{ box-shadow: {P['shadow_lg']}; }}
+
+/* ── Metric groups ── */
 .metric-group {{
-    background: {P['card']}; border: 1px solid {P['border']}; border-radius: 10px;
-    padding: 1rem 1.1rem; box-shadow: {P['shadow']}; height: 100%;
+    background: {P['card']}; border: 1px solid {P['border']}; border-radius: 14px;
+    padding: 1.1rem 1.25rem; box-shadow: {P['shadow']}; height: 100%;
+    transition: box-shadow 0.15s ease;
 }}
+.metric-group:hover {{ box-shadow: {P['shadow_lg']}; }}
 .metric-group h4 {{
-    margin: 0 0 0.7rem 0; color: {P['text']}; font-size: 0.78rem; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.06em;
+    margin: 0 0 0.8rem 0; color: {P['muted']}; font-size: 0.72rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding-bottom: 0.6rem; border-bottom: 1px solid {P['border']};
 }}
 .metric-row {{ display: flex; justify-content: space-between; align-items: baseline;
-              padding: 0.32rem 0; border-bottom: 1px solid {P['subtle']}; font-size: 0.85rem; }}
+              padding: 0.35rem 0; border-bottom: 1px solid {P['subtle']}; font-size: 0.84rem; }}
 .metric-row:last-child {{ border-bottom: none; }}
 .metric-row .lbl {{ color: {P['muted']}; }}
-.metric-row .val {{ color: {P['text']}; font-weight: 500; }}
+.metric-row .val {{ color: {P['text']}; font-weight: 500; font-variant-numeric: tabular-nums; }}
 
+/* ── Verdict pill ── */
 .verdict-pill {{
-    display: inline-flex; align-items: center; gap: 0.4rem;
-    padding: 0.32rem 0.85rem; border-radius: 999px; font-weight: 600;
-    font-size: 0.82rem; letter-spacing: 0.04em;
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 0.3rem 0.9rem; border-radius: 999px; font-weight: 700;
+    font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase;
 }}
-.v-positive {{ background: {'#dcfce7' if THEME=='light' else '#064e3b'}; color: {P['positive']}; }}
-.v-warn {{ background: {'#fef3c7' if THEME=='light' else '#78350f'}; color: {P['warn']}; }}
-.v-negative {{ background: {'#fee2e2' if THEME=='light' else '#7f1d1d'}; color: {P['negative']}; }}
+.v-positive {{ background: {P['positive_muted']}; color: {P['positive']};
+               box-shadow: 0 0 0 1px {P['positive']}30; }}
+.v-warn {{ background: {P['warn_muted']}; color: {P['warn']};
+           box-shadow: 0 0 0 1px {P['warn']}30; }}
+.v-negative {{ background: {P['negative_muted']}; color: {P['negative']};
+               box-shadow: 0 0 0 1px {P['negative']}30; }}
 .v-neutral {{ background: {P['subtle']}; color: {P['muted']}; }}
 
-.day-change-pos {{ color: {P['positive']}; font-weight: 500; font-size: 0.9rem; }}
-.day-change-neg {{ color: {P['negative']}; font-weight: 500; font-size: 0.9rem; }}
+/* ── Price change ── */
+.day-change-pos {{ color: {P['positive']}; font-weight: 600; font-size: 0.9rem; }}
+.day-change-neg {{ color: {P['negative']}; font-weight: 600; font-size: 0.9rem; }}
 
+/* ── Ticker header bar ── */
 .ticker-bar {{
     display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
-    padding: 0.4rem 0 1rem 0; border-bottom: 1px solid {P['border']}; margin-bottom: 1.2rem;
+    padding: 0.9rem 1.25rem 1rem 1.25rem;
+    background: {P['card']}; border: 1px solid {P['border']};
+    border-radius: 16px; margin-bottom: 1rem;
+    box-shadow: {P['shadow']};
 }}
-.ticker-sym {{ font-size: 1.6rem; font-weight: 700; color: {P['text']}; }}
-.ticker-name {{ color: {P['muted']}; font-size: 0.92rem; }}
-.ticker-price {{ font-size: 1.4rem; font-weight: 600; color: {P['text']}; }}
+.ticker-sym {{
+    font-size: 1.75rem; font-weight: 800; color: {P['text']};
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, {P['gradient_start']}, {P['gradient_end']});
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}}
+.ticker-name {{ color: {P['muted']}; font-size: 0.9rem; }}
+.ticker-sector {{
+    display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px;
+    background: {P['primary_muted']}; color: {P['primary']};
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em;
+}}
+.ticker-price {{ font-size: 1.5rem; font-weight: 700; color: {P['text']}; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }}
 
+/* ── Insight cards ── */
 .insight-card {{
-    background: {P['card']}; border: 1px solid {P['border']}; border-radius: 10px;
-    padding: 0.9rem 1.1rem; margin-bottom: 0.7rem; box-shadow: {P['shadow']};
+    background: {P['card']}; border: 1px solid {P['border']}; border-radius: 14px;
+    padding: 1rem 1.15rem 1rem 1.4rem; margin-bottom: 0.7rem;
+    box-shadow: {P['shadow']}; position: relative; overflow: hidden;
+    transition: box-shadow 0.15s ease;
 }}
-.insight-title {{ font-weight: 600; color: {P['text']}; font-size: 0.92rem; margin-bottom: 0.3rem; }}
-.insight-text {{ color: {P['muted']}; font-size: 0.86rem; line-height: 1.5; }}
+.insight-card:hover {{ box-shadow: {P['shadow_lg']}; }}
+.insight-card-pos {{ border-left: 3px solid {P['positive']}; }}
+.insight-card-neg {{ border-left: 3px solid {P['negative']}; }}
+.insight-title {{ font-weight: 600; color: {P['text']}; font-size: 0.9rem; margin-bottom: 0.3rem; }}
+.insight-text {{ color: {P['muted']}; font-size: 0.84rem; line-height: 1.6; }}
 .insight-badge {{
-    display: inline-block; padding: 0.18rem 0.55rem; border-radius: 5px;
-    font-size: 0.66rem; font-weight: 600; letter-spacing: 0.06em;
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0.15rem 0.55rem; border-radius: 999px;
+    font-size: 0.65rem; font-weight: 600; letter-spacing: 0.06em;
     background: {P['subtle']}; color: {P['muted']}; text-transform: uppercase;
+    vertical-align: middle; margin-left: 0.5rem;
 }}
 
+/* ── News ── */
 .news-row {{
-    padding: 0.55rem 0; border-bottom: 1px solid {P['subtle']};
-    font-size: 0.86rem;
+    padding: 0.6rem 0; border-bottom: 1px solid {P['subtle']};
+    font-size: 0.85rem;
 }}
 .news-row:last-child {{ border-bottom: none; }}
-.news-row a {{ color: {P['text']} !important; text-decoration: none; }}
+.news-row a {{ color: {P['text']} !important; text-decoration: none; font-weight: 500; }}
 .news-row a:hover {{ color: {P['primary']} !important; }}
-.news-meta {{ color: {P['muted']}; font-size: 0.75rem; margin-top: 0.15rem; }}
+.news-meta {{ color: {P['muted']}; font-size: 0.74rem; margin-top: 0.18rem; }}
+
+/* ── Source banner ── */
+.source-banner {{
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.3rem 0.8rem; border-radius: 999px;
+    background: {P['subtle']}; border: 1px solid {P['border']};
+    font-size: 0.76rem; color: {P['muted']}; margin-bottom: 1rem;
+}}
+
+/* ── Quality score dots ── */
+.score-dots {{ display: inline-flex; gap: 5px; align-items: center; vertical-align: middle; margin-left: 0.4rem; }}
+.score-dot {{
+    width: 9px; height: 9px; border-radius: 50%;
+    background: {P['positive']}; display: inline-block;
+}}
+.score-dot-empty {{
+    width: 9px; height: 9px; border-radius: 50%;
+    background: {P['border']}; display: inline-block;
+}}
+
+/* ── Section heading ── */
+.section-heading {{
+    font-size: 0.9rem; font-weight: 600; color: {P['text']};
+    text-transform: uppercase; letter-spacing: 0.07em;
+    margin: 1.2rem 0 0.6rem 0; padding-bottom: 0.4rem;
+    border-bottom: 1px solid {P['border']};
+}}
+
+/* ── Welcome card ── */
+.welcome-card {{
+    background: {P['card']}; border: 1px solid {P['border']}; border-radius: 20px;
+    padding: 3rem 2rem; text-align: center; box-shadow: {P['shadow_lg']};
+    margin-top: 1rem;
+}}
+.welcome-icon {{ font-size: 2.8rem; margin-bottom: 0.75rem; }}
+.welcome-title {{ font-size: 1.25rem; font-weight: 700; color: {P['text']}; margin-bottom: 0.4rem; letter-spacing: -0.02em; }}
+.welcome-sub {{ font-size: 0.9rem; color: {P['muted']}; margin-bottom: 1.2rem; }}
+.example-tickers {{ display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }}
+.example-ticker {{
+    padding: 0.3rem 0.85rem; border-radius: 999px;
+    background: {P['primary_muted']}; color: {P['primary']};
+    font-size: 0.8rem; font-weight: 600; letter-spacing: 0.03em;
+}}
+
+/* ── Features row (welcome) ── */
+.feature-pills {{ display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; margin-top: 1.5rem; }}
+.feature-pill {{
+    padding: 0.25rem 0.75rem; border-radius: 999px;
+    background: {P['subtle']}; border: 1px solid {P['border']};
+    color: {P['muted']}; font-size: 0.74rem; font-weight: 500;
+}}
 
 section[data-testid="stSidebar"] {{ background: {P['card']} !important; border-right: 1px solid {P['border']}; }}
 
-/* Inputs */
+/* ── Inputs ── */
 .stTextInput input {{
-    background: {P['card']} !important; border: 1px solid {P['border']} !important;
-    color: {P['text']} !important; border-radius: 8px !important; padding: 0.55rem 0.75rem !important;
+    background: {P['card']} !important; border: 1.5px solid {P['border']} !important;
+    color: {P['text']} !important; border-radius: 10px !important; padding: 0.6rem 0.85rem !important;
+    font-size: 0.95rem !important; transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
 }}
-.stTextInput input:focus {{ border-color: {P['primary']} !important; box-shadow: 0 0 0 3px {P['primary']}22 !important; }}
+.stTextInput input:focus {{
+    border-color: {P['primary']} !important;
+    box-shadow: 0 0 0 3px {P['primary']}22 !important;
+}}
 .stButton button[kind="primary"] {{
-    background: {P['primary']} !important; color: white !important;
-    border: none !important; border-radius: 8px !important; font-weight: 500 !important;
+    background: linear-gradient(135deg, {P['gradient_start']}, {P['gradient_end']}) !important;
+    color: white !important; border: none !important; border-radius: 10px !important;
+    font-weight: 600 !important; letter-spacing: 0.01em !important;
+    box-shadow: 0 2px 8px {P['gradient_start']}40 !important;
+    transition: opacity 0.15s ease, box-shadow 0.15s ease !important;
 }}
+.stButton button[kind="primary"]:hover {{ opacity: 0.92 !important; box-shadow: 0 4px 16px {P['gradient_start']}50 !important; }}
+.stButton button[kind="secondary"] {{
+    background: {P['card']} !important; color: {P['text']} !important;
+    border: 1.5px solid {P['border']} !important; border-radius: 10px !important;
+    font-weight: 500 !important; transition: border-color 0.15s ease !important;
+}}
+.stButton button[kind="secondary"]:hover {{ border-color: {P['primary']} !important; }}
 
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] {{ gap: 0.1rem; border-bottom: 1px solid {P['border']}; }}
+/* ── Tabs ── */
+.stTabs [data-baseweb="tab-list"] {{
+    gap: 0; border-bottom: 1.5px solid {P['border']};
+    background: transparent !important;
+}}
 .stTabs [data-baseweb="tab"] {{
     background: transparent !important; color: {P['muted']} !important;
-    font-weight: 500 !important; font-size: 0.88rem !important;
-    padding: 0.5rem 1rem !important; border-radius: 6px 6px 0 0 !important;
+    font-weight: 500 !important; font-size: 0.87rem !important;
+    padding: 0.55rem 1.1rem !important; border-radius: 0 !important;
+    border-bottom: 2px solid transparent !important;
+    transition: color 0.15s ease, border-color 0.15s ease !important;
 }}
-.stTabs [aria-selected="true"] {{ color: {P['text']} !important; border-bottom: 2px solid {P['primary']} !important; }}
+.stTabs [data-baseweb="tab"]:hover {{ color: {P['text']} !important; }}
+.stTabs [aria-selected="true"] {{
+    color: {P['primary']} !important;
+    border-bottom: 2px solid {P['primary']} !important;
+    font-weight: 600 !important;
+}}
 
-/* DataFrames */
-[data-testid="stDataFrame"] {{ background: {P['card']}; border-radius: 8px; }}
+/* ── DataFrames ── */
+[data-testid="stDataFrame"] {{ background: {P['card']}; border-radius: 12px; overflow: hidden; border: 1px solid {P['border']}; }}
 
-/* Theme toggle button container alignment */
-.theme-toggle {{ float: right; }}
+/* ── Radio buttons ── */
+.stRadio > div {{ gap: 0.5rem; }}
+.stRadio label {{ font-size: 0.87rem !important; }}
 
-hr {{ border-color: {P['border']} !important; }}
+/* ── Expander ── */
+[data-testid="stExpander"] {{
+    background: {P['card']}; border: 1px solid {P['border']} !important; border-radius: 12px !important;
+}}
+
+hr {{ border-color: {P['border']} !important; margin: 0.8rem 0 !important; }}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -223,18 +359,26 @@ def quarter_x(series: pd.Series):
 
 
 # ─── Header (theme toggle + title) ──────────────────────────────────────────
-hdr_l, hdr_r = st.columns([6, 1])
+hdr_l, hdr_r = st.columns([7, 1])
 with hdr_l:
-    st.markdown("# US Stock Analyser")
-    st.markdown(f"<span class='muted'>Buffett-style fundamentals · 10-year SEC EDGAR history · auto-DCF</span>",
-                unsafe_allow_html=True)
+    st.markdown(
+        f"<h1 style='background:linear-gradient(135deg,{P['gradient_start']},{P['gradient_end']});"
+        f"-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;'>"
+        f"US Stock Analyser</h1>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<span class='muted' style='font-size:0.85rem;'>"
+        f"Buffett-style fundamentals &nbsp;·&nbsp; 10-year SEC EDGAR history &nbsp;·&nbsp; auto-DCF</span>",
+        unsafe_allow_html=True,
+    )
 with hdr_r:
-    label = "Dark" if THEME == "light" else "Light"
+    label = "☀ Light" if THEME == "dark" else "☾ Dark"
     if st.button(label, use_container_width=True):
         st.session_state.theme = "dark" if THEME == "light" else "light"
         st.rerun()
 
-st.markdown("")
+st.markdown("<div style='margin-top:0.75rem;'></div>", unsafe_allow_html=True)
 
 # ─── Search ─────────────────────────────────────────────────────────────────
 sc_l, sc_r = st.columns([5, 1])
@@ -243,15 +387,30 @@ with sc_l:
                           placeholder="e.g. AAPL, MSFT, KO, BRK-B, JNJ",
                           label_visibility="collapsed")
 with sc_r:
-    go_btn = st.button("Analyse", type="primary", use_container_width=True)
+    go_btn = st.button("Analyse →", type="primary", use_container_width=True)
 
 if not query or not go_btn:
     st.markdown(f"""
-    <div class='card' style='text-align:center; padding: 2rem;'>
-      <div style='font-size: 1.05rem; font-weight: 600; color: {P['text']};'>Type a US ticker to begin</div>
-      <div class='muted' style='margin-top: 0.5rem;'>
-        Examples: <b>AAPL</b>, <b>MSFT</b>, <b>KO</b>, <b>JNJ</b>, <b>BRK-B</b>
-        · 10 years of fundamentals pulled live from SEC EDGAR.
+    <div class='welcome-card'>
+      <div class='welcome-icon'>📊</div>
+      <div class='welcome-title'>Deep-dive any US stock in seconds</div>
+      <div class='welcome-sub'>
+        Type a ticker symbol or company name above, then hit <b>Analyse →</b>
+      </div>
+      <div class='example-tickers'>
+        <span class='example-ticker'>AAPL</span>
+        <span class='example-ticker'>MSFT</span>
+        <span class='example-ticker'>KO</span>
+        <span class='example-ticker'>JNJ</span>
+        <span class='example-ticker'>BRK-B</span>
+        <span class='example-ticker'>NVDA</span>
+      </div>
+      <div class='feature-pills'>
+        <span class='feature-pill'>10-yr SEC EDGAR history</span>
+        <span class='feature-pill'>Auto DCF valuation</span>
+        <span class='feature-pill'>Graham Number</span>
+        <span class='feature-pill'>Buffett-style scoring</span>
+        <span class='feature-pill'>AI-generated insights</span>
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -305,30 +464,37 @@ def _mos_label(m):
     return f" · {m:+.0f}% MoS"
 mos_label = _mos_label(mos)
 
+sector_chip = (f"<span class='ticker-sector'>{f.sector}</span>" if f.sector else "")
 st.markdown(f"""
 <div class='ticker-bar'>
-  <span class='ticker-sym'>{f.ticker}</span>
-  <span class='ticker-name'>{f.name}{(' · ' + f.sector) if f.sector else ''}</span>
-  <span style='margin-left:auto; display:flex; align-items:center; gap:0.9rem;'>
-    <span class='ticker-price'>{fmt_money(f.price, f.currency)}</span>
-    {chg_html}
+  <div>
+    <div style='display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;'>
+      <span class='ticker-sym'>{f.ticker}</span>
+      {sector_chip}
+    </div>
+    <div class='ticker-name' style='margin-top:0.2rem;'>{f.name}</div>
+  </div>
+  <span style='margin-left:auto; display:flex; align-items:center; gap:0.85rem; flex-wrap:wrap;'>
+    <div style='text-align:right;'>
+      <div class='ticker-price'>{fmt_money(f.price, f.currency)}</div>
+      <div style='margin-top:0.1rem;'>{chg_html if chg_html else ''}</div>
+    </div>
     <span class='verdict-pill {vmap[vclass]}'>{verdict}{mos_label}</span>
   </span>
 </div>
 """, unsafe_allow_html=True)
 
-# Data-source banner — tells the user whether SEC EDGAR returned 10-year data
-# or whether we fell back to the shorter yfinance history.
+# Data-source banner
 if f.edgar_status == "ok" and f.edgar_years:
-    src_html = (f"<span class='muted' style='font-size:0.78rem;'>"
-                f"Live price: yfinance · Annual history: SEC EDGAR "
-                f"<b>({f.edgar_years} fiscal years)</b></span>")
+    src_html = (f"<div class='source-banner'>"
+                f"<span>📡 Live price: yfinance &nbsp;·&nbsp; Annual history: SEC EDGAR "
+                f"<b>({f.edgar_years} fiscal years)</b></span></div>")
 else:
-    src_html = (f"<span class='muted' style='font-size:0.78rem;'>"
-                f"Live price: yfinance · Annual history: yfinance fallback "
-                f"<span style='color:{P['warn']};'>(EDGAR unavailable: {f.edgar_status})</span></span>")
+    src_html = (f"<div class='source-banner'>"
+                f"<span>📡 Live price: yfinance &nbsp;·&nbsp; Annual history: yfinance fallback "
+                f"<span style='color:{P['warn']};font-weight:500;'>(EDGAR unavailable: {f.edgar_status})</span>"
+                f"</span></div>")
 st.markdown(src_html, unsafe_allow_html=True)
-st.markdown("")
 
 
 # ─── Tabs ───────────────────────────────────────────────────────────────────
@@ -554,10 +720,13 @@ with tab_valuation:
     cv = st.columns(3)
     with cv[0]:
         mos_str = f"{mos:+.1f}% MoS" if mos is not None else "—"
+        filled = "".join(['<span class="score-dot"></span>'] * score)
+        empty = "".join(['<span class="score-dot-empty"></span>'] * (3 - score))
+        score_html = f'{score}/3 <span class="score-dots">{filled}{empty}</span>'
         st.markdown(metric_group("DCF Intrinsic", [
             ("Per share", fmt_money(intrinsic, f.currency)),
             ("Margin of safety", mos_str),
-            ("Quality score", f"{score}/3"),
+            ("Quality score", score_html),
         ]), unsafe_allow_html=True)
     with cv[1]:
         gmos = f"{graham_mos:+.1f}% MoS" if graham_mos is not None else "—"
@@ -635,8 +804,8 @@ with tab_insights:
                     unsafe_allow_html=True)
         if insights["advantages"]:
             for item in insights["advantages"]:
-                st.markdown(f"""<div class="insight-card">
-                    <div class="insight-title">{item['title']}</div>
+                st.markdown(f"""<div class="insight-card insight-card-pos">
+                    <div class="insight-title">&#10003;&nbsp; {item['title']}</div>
                     <div class="insight-text">{item['text']}</div>
                 </div>""", unsafe_allow_html=True)
         else:
@@ -649,8 +818,8 @@ with tab_insights:
                     unsafe_allow_html=True)
         if insights["risks"]:
             for item in insights["risks"]:
-                st.markdown(f"""<div class="insight-card">
-                    <div class="insight-title">{item['title']}</div>
+                st.markdown(f"""<div class="insight-card insight-card-neg">
+                    <div class="insight-title">&#9888;&nbsp; {item['title']}</div>
                     <div class="insight-text">{item['text']}</div>
                 </div>""", unsafe_allow_html=True)
         else:
